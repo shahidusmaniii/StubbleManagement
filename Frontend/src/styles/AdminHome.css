@@ -1,0 +1,135 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@700&family=Poppins:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Assistant&display=swap');
+
+* {
+  font-family: "Poppins", sans-serif;
+}
+
+html {
+  font-size: 62.5%;
+}
+
+.list-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 2.5rem;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  width: 80%;
+}
+
+.cardReq {
+  background: #212121;
+  border-radius: 0.4rem;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.4em;
+  height: 20rem;
+}
+
+.cardReq button {
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  cursor: pointer;
+  border-radius: 2rem;
+  transition: all 0.5s;
+  background: #212121;
+  border: 0.1rem solid #ff5a91;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.cardReq button:hover {
+  flex: 2;
+}
+
+.cardReq button li {
+  padding: 10%;
+  text-align: center;
+  transition: all 0.5s;
+  text-transform: uppercase;
+  color: #ff568e;
+  letter-spacing: 0.1em;
+  font-size: 1.6rem;
+}
+
+.cardReq button:hover li {
+  transform: scale(1.1);
+}
+
+.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 2.5rem;
+}
+
+h2 {
+  font-size: 2.4rem;
+  margin-bottom: 1.5rem;
+  color: #333;
+}
+
+.CreateRoom {
+  appearance: none;
+  background-color: transparent;
+  border: 0.2rem solid #1A1A1A;
+  border-radius: 0.9375rem;
+  color: #3B3B3B;
+  cursor: pointer;
+  font-family: Roobert, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  font-size: 1.6rem;
+  font-weight: 600;
+  line-height: normal;
+  margin: 2.5rem auto;
+  min-height: 3.75rem;
+  padding: 1rem 2.3rem;
+  text-align: center;
+  text-decoration: none;
+  transition: all 300ms cubic-bezier(.23, 1, 0.32, 1);
+  user-select: none;
+  touch-action: manipulation;
+  will-change: transform;
+  display: block;
+}
+
+.CreateRoom:disabled {
+  pointer-events: none;
+}
+
+.CreateRoom:hover {
+  color: #fff;
+  background-color: #1A1A1A;
+  box-shadow: rgba(0, 0, 0, 0.25) 0 0.8rem 1.5rem;
+  transform: translateY(-0.2rem);
+}
+
+.CreateRoom:active {
+  box-shadow: none;
+  transform: translateY(0);
+}
+
+@media (max-width: 768px) {
+  html {
+    font-size: 50%;
+  }
+
+  .cardReq {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .cardReq button {
+    width: 100%;
+  }
+}

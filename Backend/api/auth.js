@@ -319,45 +319,35 @@ router.post("/LoginAdmin", async (req, res) => {
 });
 
 router.post("/Service", async (req, res) => {
-      const { email, password } = req.body;
       try {
-            // console.log("service req body",req.body); 
-            // const user = await User.findOne({ email: req.body.email });
             const EmailExist = await service.findOne({ email: req.body.email });
-            if (1) {
-                  if (EmailExist) return res.status(200).send("Already Requested!!!");
-                  else {
-                        const newSer = await service.create({
-                              email: req.body.email,
-                              mobileno: req.body.mobileno,
-                              acre: req.body.acre,
-                              ptype: req.body.ptype,
-                              date1: req.body.date1,
-                              du1: req.body.du1,
-                              du2: req.body.du2,
-                              type: req.body.type,
-                              mtype: JSON.stringify(req.body.mtype),
-                              // userType: req.body.type
-                        });
-                        // console.log("Printed", newSer);
-                        if (newSer) {
-                              res.json({ success: true, msg: "successfully requested for harvesting." })
-                        }
-                        else {
-                              res.status(401).json({ success: false, msg: "Request is not accepted." })
-                        }
-
-                  }
+            if (EmailExist) {
+                  return res.status(400).json({ success: false, msg: "Already Requested!!!" });
             } else {
-                  res.status(401).json({ success: false, msg: "you must be a farmer to make request for service!!" })
+                  const newSer = await service.create({
+                        email: req.body.email,
+                        mobileno: req.body.mobileno,
+                        acre: req.body.acre,
+                        ptype: req.body.ptype,
+                        date1: req.body.date1,
+                        du1: req.body.du1,
+                        du2: req.body.du2,
+                        type: req.body.type,
+                        mtype: JSON.stringify(req.body.mtype),
+                  });
+
+                  if (newSer) {
+                        res.json({ success: true, msg: "Successfully requested for harvesting." });
+                  } else {
+                        res.status(400).json({ success: false, msg: "Request is not accepted." });
+                  }
             }
-
       } catch (err) {
-            console.error(err.message)
-            res.status(500).send('Server Error');
-
+            console.error(err.message);
+            res.status(500).json({ success: false, msg: 'Server Error' });
       }
 });
+
 router.post('/CreateRoom', async (req, res) => {
       try {
             // console.log("service req body",req.body);
@@ -365,7 +355,8 @@ router.post('/CreateRoom', async (req, res) => {
             const NameExist = await RoomModel.findOne({ email: req.body.Name });
             // console.log(user);
             // if(user){
-            if (NameExist) return res.status(200).send("Already Requested!!!");
+            //if (NameExist) return res.status(200).send("Already Requested!!!");
+            if(NameExist) res.status(400).json({ success: false, msg: "Already Requested!!!" });
             else {
                   const createRoom = await RoomModel.create({
                         Name: req.body.Name,
@@ -451,24 +442,25 @@ router.post('/ClearReqForm', async (req, res) => {
 
 router.post("/AdminHome", async (req, res) => {
       try {
+            // Get the current date and time
+            const currentDate = new Date();
 
-            const room = await RoomModel.find({});
+            // Find rooms where the endDate is greater than the current date and time
+            const room = await RoomModel.find({ endDate: { $gt: currentDate } });
             const service1 = await service.find({});
 
-            // console.log("mom",room);
-            // console.log("mom",service1);
             if (room && service1) {
                   res.status(200).send({ room, service1 });
-            }
-            else {
+            } else {
                   res.status(202).send({ message: "Not Found!" });
             }
 
-            // res.send({room:"room",service:"Service"});
       } catch (e) {
             console.log("Error->", e);
+            res.status(500).send('Server Error');
       }
-})
+});
+
 
 
 module.exports = router;
