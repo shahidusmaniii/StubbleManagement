@@ -1,0 +1,210 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+* {
+    box-sizing: border-box;
+    font-family: 'Poppins', sans-serif;
+}
+
+body {
+    background-color: #f0f2f5;
+    color: #333;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+h1,
+h3 {
+    color: #2c3e50;
+}
+
+.AuctionField {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 15px;
+    border: 1px solid #bdc3c7;
+    border-radius: 5px;
+    font-size: 16px;
+}
+
+button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #2980b9;
+}
+
+.chat-container {
+    background-color: white;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    height: 400px;
+    overflow-y: auto;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.chat-message {
+    margin-bottom: 15px;
+    clear: both;
+}
+
+.chat-message .sender {
+    font-weight: bold;
+    color: #34495e;
+}
+
+.chat-message .message {
+    background-color: #ecf0f1;
+    padding: 10px 15px;
+    border-radius: 18px;
+    display: inline-block;
+    max-width: 80%;
+}
+
+.chat-message .timestamp {
+    font-size: 12px;
+    color: #7f8c8d;
+    margin-left: 10px;
+}
+
+.float-right {
+    float: right;
+}
+
+.float-right .message {
+    background-color: #3498db;
+    color: white;
+}
+
+.chat-input {
+    display: flex;
+    margin-top: 20px;
+}
+
+.chat-input input {
+    flex-grow: 1;
+    padding: 12px;
+    border: 1px solid #bdc3c7;
+    border-radius: 5px 0 0 5px;
+    font-size: 16px;
+}
+
+.chat-input button {
+    border-radius: 0 5px 5px 0;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.bid-info {
+    background-color: white;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.bid-info h3 {
+    margin: 10px 0;
+}
+
+.winner-message {
+    font-size: 24px;
+    font-weight: bold;
+    color: #27ae60;
+    margin-top: 20px;
+}
+
+/* @import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@700&family=Poppins:wght@400;500;600&display=swap');
+
+* {
+      font-family: "Poppins", sans-serif;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Assistant&display=swap');
+
+html {
+      font-size: 62.5%;
+}
+
+.formBox {
+      display: -webkit-box;
+      display: -ms-flexbox;
+      display: flex;
+      -webkit-box-pack: center;
+      -ms-flex-pack: center;
+      justify-content: center;
+      -webkit-box-align: center;
+      -ms-flex-align: center;
+      align-items: center;
+      -webkit-box-orient: vertical;
+      -webkit-box-direction: normal;
+      -ms-flex-direction: column;
+      flex-direction: column;
+      border: 1px solid rgb(57, 57, 57);
+      padding: 3rem 1rem;
+      background-color: rgb(255, 251, 251);
+      border-radius: 1rem;
+      position: relative;
+}
+ 
+
+.chat-container {
+      margin-top: 5rem;
+      border: 0.1rem solid #ddd;
+      border-radius: 1rem;
+      height: 50rem;
+      overflow-y: scroll;
+      background-color: aliceblue;
+}
+
+.chat-message {
+      padding: 1rem;
+      margin-bottom: 0.5rem;
+      border-radius: 0.5rem;
+}
+
+.chat-message .sender {
+      font-weight: bold;
+      margin-right: 0.5rem;
+}
+
+.chat-message .timestamp {
+      font-size: 1.2rem;
+      color: #aaa;
+}
+
+.chat-input {
+      margin-top: 2rem;
+}
+
+.AuctionField {
+      margin: 1rem;
+      padding: 1.2rem;
+      border-radius: 0.6rem;
+      border: none;
+      background-color: #f6f7eb;
+      width: 100%;
+      box-sizing: border-box;
+}
+
+.subcen {
+      margin-top: 1.2rem;
+      padding: 10px 20px;
+      border-radius: 10px;
+} */
