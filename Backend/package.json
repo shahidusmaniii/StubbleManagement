@@ -13,9 +13,10 @@
     "socket.io": "^4.6.1"
   },
   "scripts": {
-    "dev": "nodemon server",
-    "serve": "node server",
-    "start": "node server.js"
+    "start": "node servers/server.js",
+    "start:auction": "node servers/AuctionServer.js",
+    "dev:server": "nodemon servers/server.js",
+    "dev:auction": "nodemon servers/AuctionServer.js"
   },
   "name": "backend",
   "version": "1.0.0",
