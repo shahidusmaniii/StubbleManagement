@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../../../../styles/AdminHome.css'
-
 import axios from 'axios';
 import AppContext from '../../../../context/AppContext'
 
@@ -15,9 +14,9 @@ const AdminHome = () => {
       const getData = async () => {
             try {
                   const { data } = await axios.post("http://localhost:8000/AdminHome");
-                  if (data?.room && data?.service1) {
+                  if (data?.room && data?.Service) {
                         setRoom(data.room);
-                        setService(data.service1);
+                        setService(data.Service);
                   } else {
                         alert(data?.message);
                   }

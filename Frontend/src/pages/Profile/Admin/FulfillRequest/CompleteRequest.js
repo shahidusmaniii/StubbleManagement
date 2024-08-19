@@ -18,44 +18,44 @@ const CompleteRequest = () => {
       }
       return (
             <>
-                  <div class="cardforlist">
-                        <div class="tools">
-                              <div class="circle">
+                  <div className="cardforlist">
+                        <div className="tools">
+                              <div className="circle">
                                     <button onClick={handleBack}><span class="red box">Back</span></button>
                               </div>
                         </div>
-                        <div class="header2">{data.email}</div>
-                        <div class="body2">
-                              <div class="req">
-                                    <div class="req-name"><p>Mobile No: {data.mobileno}</p></div>
+                        <div className="header2">{data.email}</div>
+                        <div className="body2">
+                              <div className="req">
+                                    <div className="req-name"><p>Mobile No: {data.mobileno}</p></div>
 
                               </div>
-                              <div class="req">
-                                    <div class="req-name"><p>Size of Farm (in Acre): {data.acre}</p></div>
+                              <div className="req">
+                                    <div className="req-name"><p>Size of Farm (in Acre): {data.acre}</p></div>
 
                               </div>
-                              <div class="req">
-                                    <div class="req-name"><p>Type of Grains: {data.ptype}</p></div>
+                              <div className="req">
+                                    <div className="req-name"><p>Type of Grains: {data.ptype}</p></div>
 
                               </div>
-                              <div class="req">
-                                    <div class="req-name"><p>Planting Date: {data.date1}</p></div>
+                              <div className="req">
+                                    <div className="req-name"><p>Planting Date: {data.date1}</p></div>
 
                               </div>
-                              <div class="req">
-                                    <div class="req-name"><p>Start Date: {data.du1}</p></div>
+                              <div className="req">
+                                    <div className="req-name"><p>Start Date: {data.du1}</p></div>
 
                               </div>
-                              <div class="req">
-                                    <div class="req-name"><p>End Date: {data.du2}</p></div>
+                              <div className="req">
+                                    <div className="req-name"><p>End Date: {data.du2}</p></div>
 
                               </div>
-                              <div class="req">
-                                    <div class="req-name"><p>service Type: {data.type}</p></div>
+                              <div className="req">
+                                    <div className="req-name"><p>service Type: {data.type}</p></div>
 
                               </div>
-                              <div class="req">
-                                    <div class="req-name"><p>Machines Required: {data.mtype}</p></div>
+                              <div className="req">
+                                    <div className="req-name"><p>Machines Required: {data.mtype}</p></div>
 
                               </div>
                               <div className="req">
