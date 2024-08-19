@@ -6,12 +6,6 @@ html {
   font-size: 62.5%;
 }
 
-
-
-
-/* Body Part ////////////////////////////////////////////*/
-
-/* Carousel images */
 .carousel {
   display: flex;
   justify-content: space-between;
@@ -53,7 +47,7 @@ html {
 /* Write on the top of an image */
 .main-image::before {
   content: "We Provide Solution For Agriculture Waste";
-  font-family: 'Assistant', sans-serif;
+  font-family: 'Times New Roman', sans-serif;
   position: absolute;
   color: rgb(0, 0, 0);
   /* or any color */
@@ -109,7 +103,7 @@ html {
 }
 
 .text-head {
-  font-family: 'Anton', sans-serif;
+  font-family: 'Times New Roman', sans-serif;
   font-stretch: expanded;
   font-size: x-large;
   /* font-style:oblique; */
@@ -148,7 +142,7 @@ html {
 #about {
   background-color: black;
   color: white;
-  font-family: 'Assistant', 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+  font-family: 'Times New Roman', 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
   padding: 20rem;
 }
 
@@ -242,12 +236,6 @@ button:hover .button-text {
   color: #fff;
 }
 
-/* @media(min-width:1900px){
-    html{ 
-      font-size: 255%;
-
-    }
-  } */
 @media(min-width:1600px) {
   html {
     font-size: 75%;

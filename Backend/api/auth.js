@@ -293,24 +293,21 @@ router.post("/LoginCompany", async (req, res) => {
             res.status(202).send({ success: false, message: "Error! : *** userNotfound ***" });
       }
 });
-router.post("/LoginAdmin", async (req, res) => {
+
+router.post("/LoginAdmin", async (req, res) => { 
       const { email, password } = req.body;
       const admin = await Admin.findOne({ email: email });
       if (admin) {
             if (await bcrypt.compare(password, admin.password)) {
-
                   // var token = jwt.sign({ email: Admin.email, password:adpass  }, `${process.env.TOCKEN_PRIVATE_KEY}`);
-
                   res.status(200).send({
-                        data: admin,
-                        //   cookie: token,
-                        type: "Admin",
-                        name: admin.name,
+                        // cookie: token,
                         success: true,
                         message: `Hello ${admin.name}, You Logged in successfully!`,
-
+                        data: admin,
+                        type: "Admin",
+                        name: admin.name,
                   });
-
             } else
                   res.status(201).send({ success: false, message: "Error! : *** Invalid Password ***" });
       } else {
@@ -447,10 +444,10 @@ router.post("/AdminHome", async (req, res) => {
 
             // Find rooms where the endDate is greater than the current date and time
             const room = await RoomModel.find({ endDate: { $gt: currentDate } });
-            const service1 = await service.find({});
+            const Service = await service.find({});
 
-            if (room && service1) {
-                  res.status(200).send({ room, service1 });
+            if (room && Service) {
+                  res.status(200).send({ room, Service });
             } else {
                   res.status(202).send({ message: "Not Found!" });
             }
