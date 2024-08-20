@@ -116,6 +116,16 @@ body {
     transform: translateY(-0.2rem);
 }
 
+.button-name:focus {
+    outline: none; /* Removes the default focus outline */
+    /* You can add a custom focus style here, for example: */
+    box-shadow: 
+        rgba(45, 35, 66, 0.3) 0 0.4rem 0.8rem,
+        rgba(45, 35, 66, 0.2) 0 0.7rem 1.3rem -0.3rem,
+        #D6D6E7 0 -0.3rem 0 inset,
+        0 0 0 0.2rem rgba(255, 255, 255, 0.5); /* Adds a white glow effect */
+}
+
 .button-name:active {
     box-shadow: #D6D6E7 0 0.3rem 0.7rem inset;
     transform: translateY(0.2rem);

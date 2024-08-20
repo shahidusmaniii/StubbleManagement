@@ -17,7 +17,7 @@ const LoginAdmin = () => {
         const response = await axios.post('http://localhost:8000/LoginAdmin', {
             email: Admin.email,
             password: Admin.password
-        })
+        }) 
         if (response.data.success) {
             showAlert(response.data.message, 'success');
             setUser(response.data.data);

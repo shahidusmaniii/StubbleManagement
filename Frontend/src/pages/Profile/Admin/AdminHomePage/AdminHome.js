@@ -9,7 +9,7 @@ const AdminHome = () => {
       const navigate = useNavigate();
 
       const [room, setRoom] = useState([]);
-      const [service, setService] = useState([]);
+      const [service, setService] = useState([]); 
 
       const getData = async () => {
             try {
