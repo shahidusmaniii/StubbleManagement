@@ -8,7 +8,7 @@ function useUser() {
 
     const setUser = (newUser) => {
         if(newUser === null) setUserState(null);
-        else setUserState(newUser.name);
+        else setUserState(newUser);
         if (newUser) {
             localStorage.setItem("userLogin", JSON.stringify(newUser));
         } else {

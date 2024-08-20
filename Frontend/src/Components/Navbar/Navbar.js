@@ -1,4 +1,4 @@
-import React, { useContext, useEffect } from 'react';
+import React, { useContext } from 'react';
 import '../../styles/Navbar.css';
 import AppContext from '../../context/AppContext'
 import { useNavigate } from 'react-router-dom';
@@ -32,14 +32,14 @@ function Navbar() {
 
     const navigate = useNavigate();
     const handleSignup = () => {
-        navigate('OptionSignup');
+        navigate('/OptionSignup');
     }
     const handleLogin = () => {
-        navigate('OptionLogin');
+        navigate('/OptionLogin');
     }
 
     const ProfileFun = () => {
-        navigate('Profile');
+        navigate('/Profile');
     }
 
 
@@ -71,7 +71,7 @@ function Navbar() {
                         {
                             user ?
                                 <>
-                                    <button role="button" className="button-name" onClick={ProfileFun}>{user}</button>
+                                    <button role="button" className="button-name" onClick={ProfileFun}>{user.name}</button>
                                     <button role="button" className="button-name" onClick={Logout}>LogOut</button>
                                 </>
                                 :

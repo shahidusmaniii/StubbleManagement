@@ -3,7 +3,7 @@ import useUser from '../hooks/useUser';
 import AppContext from "./AppContext";
 
 export const AppContextProvider = (props) => {
-    const [user, setUser] = useUser();
+    const [user, setUser] = useUser(null);
     const [alert, setAlert] = useState(null);
     const [loggedinC, setLoggedinC] = useState(localStorage.getItem("loginC"));
     const [loggedinF, setLoggedinF] = useState(localStorage.getItem("loginF"));
@@ -13,10 +13,10 @@ export const AppContextProvider = (props) => {
     // useEffect(() => {
     //     console.log("Logged in states:", loggedinA, loggedinC, loggedinF);
     // }, [alert, loggedinA, loggedinC, loggedinF]);
-    useEffect(() => {
-        localStorage.setItem("user", user);
-    }, [setUser]);
- 
+    // useEffect(() => {
+    //     localStorage.setItem("user", user);
+    // }, [user]);
+
     const LoginC = (state) => {
         localStorage.setItem("loginC", state);
         setLoggedinC(state);
