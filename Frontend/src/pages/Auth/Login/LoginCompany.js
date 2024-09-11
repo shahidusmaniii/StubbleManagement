@@ -22,10 +22,10 @@ const LoginCompany = () => {
         });
         if (response.data.success) {
             showAlert(response.data.message, "success");
-            localStorage.setItem("loginC", "true");
+            //localStorage.setItem("loginC", "true");
             setUser(response.data.data);
             LoginC('true');
-            localStorage.setItem("userLogin", JSON.stringify(response.data.data));
+            //localStorage.setItem("userLogin", JSON.stringify(response.data.data));
             navigate("/CompanyHome");
         } else {
             showAlert(response.data.message, "danger");

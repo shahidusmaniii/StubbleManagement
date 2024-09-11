@@ -21,7 +21,7 @@ const LoginFarmer = () => {
         if (response.data.success) {
             showAlert(response.data.message, "success");
             setUser(response.data.data);
-            localStorage.setItem("userLogin", JSON.stringify(response.data.data));
+            //localStorage.setItem("userLogin", JSON.stringify(response.data.data));
             LoginF('true');
             navigate("/FarmerHome");
         } else {
