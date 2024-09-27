@@ -31,7 +31,7 @@ io.on('connection', (socket) => {
         let room = await RoomModel.findOne({ Code: data.Code });
         if (room) {
             console.log("Joined Successfully");
-            socket.join(data.Code);
+            socket.join(data.Code); 
             socket.emit("startDetails", room);
 
             const endTime = new Date(room.endDate).getTime();
