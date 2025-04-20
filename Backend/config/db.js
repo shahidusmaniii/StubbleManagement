@@ -1,9 +1,8 @@
 const mongoose = require("mongoose");
-// const config = require('config');
-// const db = config.get('mongoURI');
-const db = 'mongodb://localhost:27017/stubbleburning';
+require('dotenv').config();
 
-
+// Use environment variable instead of config
+const db = process.env.MONGO_URI;
 
 function connectDB() {
       mongoose.set('strictQuery', false);
@@ -15,7 +14,5 @@ function connectDB() {
             console.log("Error Occured at DB connection", err);
       });
 }
-    
-
 
 module.exports = connectDB;

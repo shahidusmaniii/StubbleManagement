@@ -101,7 +101,7 @@ function endAuction(roomCode) {
 }
 
 // module.exports = AuctionServer;
-AUCTION_SERVER_PORT = 8001 || process.env.AUCTION_SERVER_PORT;
+const AUCTION_SERVER_PORT = process.env.AUCTION_SERVER_PORT || 8001;
 AuctionServer.listen(AUCTION_SERVER_PORT, () => {
     console.log(`Auction Server is Runnig at port ${AUCTION_SERVER_PORT}`);
 });
