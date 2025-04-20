@@ -27,11 +27,11 @@ io.on('connection', (socket) => {
     console.log("A user is Connected", socket.id);
 
     socket.on("join room", async (data) => {
-        console.log("Room code is ", data.Code);
-        let room = await RoomModel.findOne({ Code: data.Code });
+        console.log("Room code is ", data.code);
+        let room = await RoomModel.findOne({ code: data.code });
         if (room) {
             console.log("Joined Successfully");
-            socket.join(data.Code); 
+            socket.join(data.code); 
             socket.emit("startDetails", room);
 
             const endTime = new Date(room.endDate).getTime();
@@ -41,27 +41,27 @@ io.on('connection', (socket) => {
                 socket.emit("auction_ended");
             } else {
                 const timeLeft = endTime - currentTime;
-                if (auctionTimers[data.Code]) {
-                    clearTimeout(auctionTimers[data.Code]);
+                if (auctionTimers[data.code]) {
+                    clearTimeout(auctionTimers[data.code]);
                 }
-                auctionTimers[data.Code] = setTimeout(() => {
-                    io.to(data.Code).emit("auction_ended");
-                    endAuction(data.Code);
+                auctionTimers[data.code] = setTimeout(() => {
+                    io.to(data.code).emit("auction_ended");
+                    endAuction(data.code);
                 }, timeLeft);
             }
 
-            let startingBid = await AuctionModel.findOne({ Room: data.Code });
-            socket.emit("starting_bid", startingBid ? startingBid.Bid : 0);
+            let startingBid = await AuctionModel.findOne({ room: data.code });
+            socket.emit("starting_bid", startingBid ? startingBid.bid : 0);
 
-            let latestBid = await AuctionModel.findOne({ Room: data.Code }).sort({ _id: -1 });
+            let latestBid = await AuctionModel.findOne({ room: data.code }).sort({ _id: -1 });
             if (latestBid) {
                 socket.emit("curr_bid", latestBid);
             }
 
-            let recentBids = await AuctionModel.find({ Room: data.Code }).sort({ _id: -1 }).limit(3);
+            let recentBids = await AuctionModel.find({ room: data.code }).sort({ _id: -1 }).limit(3);
             socket.emit("bids", recentBids.reverse());
         } else {
-            socket.emit("room_error", data.Code);
+            socket.emit("room_error", data.code);
         }
     });
 
@@ -71,17 +71,21 @@ io.on('connection', (socket) => {
             return;
         }
 
-        let room = await RoomModel.findOne({ Code: data.Code });
+        let room = await RoomModel.findOne({ code: data.code });
         if (!room || new Date() >= new Date(room.endDate)) {
             socket.emit("error_bid", { message: "Auction has ended or does not exist" });
             return;
         }
 
-        let latestBid = await AuctionModel.findOne({ Room: data.Code }).sort({ _id: -1 });
-        if (!latestBid || latestBid.Bid < data.bid) {
-            let newBid = await AuctionModel.create({ Bid: data.bid, User: data.user, Room: data.Code });
-            io.to(data.Code).emit('receive_bid', newBid);
-            io.to(data.Code).emit("curr_bid", newBid);
+        let latestBid = await AuctionModel.findOne({ room: data.code }).sort({ _id: -1 });
+        if (!latestBid || latestBid.bid < data.bid) {
+            let newBid = await AuctionModel.create({ 
+                bid: data.bid,
+                user: data.user,
+                room: data.code
+            });
+            io.to(data.code).emit('receive_bid', newBid);
+            io.to(data.code).emit("curr_bid", newBid);
         } else {
             socket.emit("error_bid", { message: "Bid must be higher than the current highest bid" });
         }

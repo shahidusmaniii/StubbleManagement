@@ -135,7 +135,7 @@ router.post('/register', [
     check('name', 'Name is required').not().isEmpty(),
     check('email', 'Please include a valid email').isEmail(),
     check('password', 'Please enter a password with 6 or more characters').isLength({ min: 6 }),
-    check('mobileno', 'Mobile number is required').not().isEmpty(),
+    check('mobileNo', 'Mobile number is required').not().isEmpty(),
     check('userType', 'User type is required').exists()
 ], encryption, async (req, res) => {
     const errors = validationResult(req);
@@ -143,7 +143,7 @@ router.post('/register', [
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, email, password, mobileno, userType } = req.body;
+    const { name, email, password, mobileNo, userType } = req.body;
 
     try {
         // Check for existing user across all collections
@@ -161,21 +161,21 @@ router.post('/register', [
         if (userType === 'Farmer') {
             newUser = await User.create({
                 name,
-                mobileno,
+                mobileNo,
                 email,
                 password
             });
         } else if (userType === 'Company') {
             newUser = await Company.create({
                 name,
-                mobileno,
+                mobileNo,
                 email,
                 password
             });
         } else if (userType === 'Admin') {
             newUser = await Admin.create({
                 name,
-                mobileno,
+                mobileNo,
                 email,
                 password
             });
@@ -251,14 +251,14 @@ router.post('/services', auth, async (req, res) => {
 
         const newService = await service.create({
             email: req.body.email,
-            mobileno: req.body.mobileno,
+            mobileNo: req.body.mobileNo,
             acre: req.body.acre,
-            ptype: req.body.ptype,
+            pType: req.body.pType,
             date1: req.body.date1,
             du1: req.body.du1,
             du2: req.body.du2,
             type: req.body.type,
-            mtype: JSON.stringify(req.body.mtype)
+            mType: JSON.stringify(req.body.mType)
         });
 
         if (newService) {
@@ -308,8 +308,8 @@ router.delete('/services/:email', auth, async (req, res) => {
         const clearList = await ClearedList.create({
             email: req.params.email,
             tResidue: req.body.tResidue,
-            tgrain: req.body.tgrain,
-            sdate: req.body.sdate
+            tGrain: req.body.tGrain,
+            sDate: req.body.sDate
         });
 
         // Remove from service requests
@@ -337,17 +337,17 @@ router.delete('/services/:email', auth, async (req, res) => {
  */
 router.post('/rooms', auth, async (req, res) => {
     try {
-        const roomExists = await RoomModel.findOne({ Name: req.body.Name });
+        const roomExists = await RoomModel.findOne({ name: req.body.name });
 
         if (roomExists) {
             return res.status(400).json({ success: false, msg: 'Room with that name already exists' });
         }
 
         const room = await RoomModel.create({
-            Name: req.body.Name,
+            name: req.body.name,
             description: req.body.description,
-            Code: req.body.Code,
-            StartBid: req.body.StartBid,
+            code: req.body.code,
+            startBid: req.body.startBid,
             startDate: req.body.startDate,
             endDate: req.body.endDate
         });
@@ -355,9 +355,9 @@ router.post('/rooms', auth, async (req, res) => {
         if (room) {
             // Create initial bid by admin
             const initialBid = await AuctionModel.create({
-                Bid: req.body.StartBid,
-                Room: req.body.Code,
-                User: "Admin"
+                bid: req.body.startBid,
+                room: req.body.code,
+                user: "Admin"
             });
 
             return res.status(201).json({
