@@ -2,31 +2,31 @@ const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
     name: {
-        type:String,
-        required:true,
-        min: 2,
-      max: 50,
+        type: String,
+        required: true,
+        minlength: 2,
+        maxlength: 50,
     },
-    mobileno: {
-        type:String,
-        required:true,
-        unique:true,
-        min: 6,
-        max: 15,
+    mobileNo: {
+        type: String,
+        required: true,
+        unique: true,
+        minlength: 6,
+        maxlength: 15,
     },
     email: {
-        type:String,
-        required:true,
-        unique:true,
-        min: 2,
-      max: 30,
+        type: String,
+        required: true,
+        unique: true,
+        minlength: 2,
+        maxlength: 30,
     },
-    password:{
-        type:String,
-        required:true,
-        min: 6,
-      max: 50,
+    password: {
+        type: String,
+        required: true,
+        minlength: 6,
+        maxlength: 50,
     }
 });
 
-module.exports =mongoose.model('UserInfo', UserSchema);
+module.exports = mongoose.model('User', UserSchema);
