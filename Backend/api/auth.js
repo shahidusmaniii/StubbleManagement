@@ -649,6 +649,8 @@ router.post('/api/rooms/join', auth, async (req, res) => {
             roomCode: code
         });
         
+        let participantAdded = false;
+        
         // If not already joined, record participation
         if (!existingParticipation) {
             await RoomParticipation.create({
@@ -656,12 +658,25 @@ router.post('/api/rooms/join', auth, async (req, res) => {
                 userType: req.user.type,
                 roomCode: code
             });
+            participantAdded = true;
+        }
+        
+        // Notify auction server about participant (if connected)
+        try {
+            const io = require('socket.io-client');
+            const socket = io('http://localhost:8001');
+            socket.emit('room_joined', { code, userId: req.user.id });
+            socket.disconnect();
+        } catch (socketErr) {
+            console.error('Failed to notify auction server:', socketErr);
+            // Non-critical error, continue anyway
         }
         
         return res.json({
             success: true,
             msg: 'Successfully joined the auction room',
-            room
+            room,
+            participantAdded
         });
     } catch (err) {
         console.error(err.message);

@@ -5,8 +5,32 @@ const AuctionServer = http.createServer(app);
 const { Server } = require('socket.io');
 const AuctionModel = require('../models/Auction');
 const RoomModel = require('../models/AuctionRoom');
+const mongoose = require('mongoose');
 const connectDB = require('../config/db');
 const cookieParser = require('cookie-parser');
+
+// Define the schema for room participants if it doesn't exist elsewhere
+const RoomParticipationSchema = new mongoose.Schema({
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true
+    },
+    userType: {
+        type: String,
+        required: true
+    },
+    roomCode: {
+        type: String,
+        required: true
+    },
+    joinedAt: {
+        type: Date,
+        default: Date.now
+    }
+});
+
+// Create the model if it doesn't already exist
+const RoomParticipation = mongoose.models.RoomParticipation || mongoose.model('RoomParticipation', RoomParticipationSchema);
 
 connectDB();
 app.use(cookieParser());
@@ -22,6 +46,19 @@ const io = new Server(AuctionServer, {
 });
 
 const auctionTimers = {};
+const roomParticipants = {}; // Track online participants per room
+
+// Get actual participant count from database
+async function getParticipantCount(roomCode) {
+    try {
+        const count = await RoomParticipation.countDocuments({ roomCode });
+        console.log(`Room ${roomCode} has ${count} registered participants`);
+        return count;
+    } catch (err) {
+        console.error(`Error getting participant count for room ${roomCode}:`, err);
+        return 0;
+    }
+}
 
 io.on('connection', (socket) => {
     console.log("A user is Connected", socket.id);
@@ -48,6 +85,23 @@ io.on('connection', (socket) => {
             
             console.log("Joined Successfully");
             socket.join(data.code); 
+            
+            // Track online participants
+            if (!roomParticipants[data.code]) {
+                roomParticipants[data.code] = new Set();
+            }
+            roomParticipants[data.code].add(socket.id);
+            
+            // Get actual participant count from database
+            const participantCount = await getParticipantCount(data.code);
+            
+            // Update participant count for all users in the room
+            io.to(data.code).emit("participant_count", participantCount);
+            
+            // Add participant count to room details
+            room = room.toObject();
+            room.participants = participantCount;
+            
             socket.emit("startDetails", room);
 
             const endTime = new Date(room.endDate).getTime();
@@ -59,6 +113,9 @@ io.on('connection', (socket) => {
             } else {
                 const timeLeft = endTime - currentTime;
                 console.log(`Auction time remaining for room ${data.code}: ${Math.floor(timeLeft/1000/60)} minutes`);
+                
+                // Send time remaining to client
+                socket.emit("time_remaining", timeLeft);
                 
                 if (auctionTimers[data.code]) {
                     clearTimeout(auctionTimers[data.code]);
@@ -90,6 +147,14 @@ io.on('connection', (socket) => {
         } else {
             console.log("Room not found with code:", data.code);
             socket.emit("room_error", data.code);
+        }
+    });
+
+    // Listen for join events from the API
+    socket.on('room_joined', async (data) => {
+        if (data && data.code) {
+            const participantCount = await getParticipantCount(data.code);
+            io.to(data.code).emit("participant_count", participantCount);
         }
     });
 
@@ -173,6 +238,14 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log("User disconnected", socket.id);
+        
+        // Update online users count when users disconnect
+        for (const roomCode in roomParticipants) {
+            if (roomParticipants[roomCode].has(socket.id)) {
+                roomParticipants[roomCode].delete(socket.id);
+                // We don't update participant count here, as it counts registered participants, not online users
+            }
+        }
     });
 });
 

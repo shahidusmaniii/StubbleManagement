@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import io from 'socket.io-client';
@@ -14,8 +14,11 @@ const AuctionRoom = () => {
   const [bidSuccess, setBidSuccess] = useState('');
   const [socket, setSocket] = useState(null);
   const [timeRemaining, setTimeRemaining] = useState(null);
+  const [formattedTimeRemaining, setFormattedTimeRemaining] = useState('');
   const [socketConnected, setSocketConnected] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [participantCount, setParticipantCount] = useState(0);
+  const timerRef = useRef(null);
 
   // Get the current user ID when the component loads
   useEffect(() => {
@@ -45,6 +48,47 @@ const AuctionRoom = () => {
     
     getUserInfo();
   }, []);
+  
+  // Function to format time remaining as days, hours, minutes, seconds
+  const formatTimeRemaining = (milliseconds) => {
+    if (!milliseconds || milliseconds <= 0) return 'Auction Ended';
+    
+    const seconds = Math.floor((milliseconds / 1000) % 60);
+    const minutes = Math.floor((milliseconds / (1000 * 60)) % 60);
+    const hours = Math.floor((milliseconds / (1000 * 60 * 60)) % 24);
+    const days = Math.floor(milliseconds / (1000 * 60 * 60 * 24));
+    
+    return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+  };
+  
+  // Update timer every second
+  useEffect(() => {
+    if (timeRemaining && timeRemaining > 0) {
+      // Set initial formatted time
+      setFormattedTimeRemaining(formatTimeRemaining(timeRemaining));
+      
+      // Clear any existing interval
+      if (timerRef.current) clearInterval(timerRef.current);
+      
+      // Set up the interval to update every second
+      timerRef.current = setInterval(() => {
+        setTimeRemaining(prev => {
+          if (prev <= 1000) {
+            clearInterval(timerRef.current);
+            return 0;
+          }
+          const newTime = prev - 1000;
+          setFormattedTimeRemaining(formatTimeRemaining(newTime));
+          return newTime;
+        });
+      }, 1000);
+    }
+    
+    // Clean up on unmount
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [timeRemaining]);
   
   // Function to check if a bid belongs to the current user
   const isCurrentUserBid = useCallback((bid) => {
@@ -83,6 +127,11 @@ const AuctionRoom = () => {
       if (roomData.startBid) {
         setBidAmount((parseInt(roomData.startBid) + 10).toString());
       }
+      
+      // Initialize participant count if available
+      if (roomData.participants) {
+        setParticipantCount(roomData.participants);
+      }
     });
     
     newSocket.on('receive_bid', (bid) => {
@@ -92,6 +141,19 @@ const AuctionRoom = () => {
         ...prevAuction,
         currentBid: bid.bid
       }));
+    });
+    
+    // Set timer from server
+    newSocket.on('time_remaining', (timeLeft) => {
+      console.log("Received time remaining:", timeLeft);
+      setTimeRemaining(timeLeft);
+      setFormattedTimeRemaining(formatTimeRemaining(timeLeft));
+    });
+    
+    // Update participant count
+    newSocket.on('participant_count', (count) => {
+      console.log("Participant count updated:", count);
+      setParticipantCount(count);
     });
     
     // Other socket event handlers...
@@ -111,6 +173,8 @@ const AuctionRoom = () => {
     
     newSocket.on('auction_ended', () => {
       setError('This auction has ended');
+      setTimeRemaining(0);
+      setFormattedTimeRemaining('Auction Ended');
     });
     
     newSocket.on('room_error', (code) => {
@@ -219,7 +283,7 @@ const AuctionRoom = () => {
       let userId = currentUserId;
       let userName = '';
       
-      // Try to get user info from API if we don't have it
+      // Try to get user info from API
       try {
         const userRes = await axios.get('/api/auth/me', {
           headers: { 'x-auth-token': token }
@@ -302,11 +366,20 @@ const AuctionRoom = () => {
           <div className="card auction-container mb-4">
             <div className="card-body">
               <h4 className="card-title">Auction Details</h4>
-              {timeRemaining && (
-                <div className="alert alert-info">
-                  <strong>Time Remaining:</strong> {timeRemaining}
+              
+              {formattedTimeRemaining && !isAuctionEnded && (
+                <div className="alert alert-info mb-3">
+                  <div className="d-flex justify-content-between align-items-center">
+                    <div>
+                      <strong>Time Remaining:</strong>
+                    </div>
+                    <div className="countdown-timer">
+                      {formattedTimeRemaining}
+                    </div>
+                  </div>
                 </div>
               )}
+              
               <p className="card-text">
                 <strong>Description:</strong> {auction?.description || 'No description provided.'}<br />
                 <strong>Company:</strong> {auction?.companyName}<br />
@@ -314,7 +387,7 @@ const AuctionRoom = () => {
                 <strong>Current Bid:</strong> ₹{auction?.currentBid || auction?.startingBid}/acre<br />
                 <strong>End Date:</strong> {auction?.endDate ? formatDate(auction.endDate) : 'N/A'}<br />
                 <strong>Status:</strong> {auction?.endDate && new Date(auction.endDate) < new Date() ? 'Ended' : 'Active'}<br />
-                <strong>Participants:</strong> {auction?.participants || 0}
+                <strong>Participants:</strong> {participantCount || 0}
               </p>
               
               {!isAuctionEnded && (
@@ -351,7 +424,10 @@ const AuctionRoom = () => {
         <div className="col-md-4">
           <div className="card">
             <div className="card-header bg-primary text-white">
-              <h5 className="mb-0">Bid History</h5>
+              <div className="d-flex justify-content-between align-items-center">
+                <h5 className="mb-0">Bid History</h5>
+                <span className="badge badge-light">{bids.length} Bids</span>
+              </div>
             </div>
             <div className="card-body p-0" style={{ maxHeight: '400px', overflowY: 'auto' }}>
               {bids.length === 0 ? (
