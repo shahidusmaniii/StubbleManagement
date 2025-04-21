@@ -1,0 +1,31 @@
+{
+  "name": "stubble-management-system",
+  "version": "1.0.0",
+  "description": "An eco-friendly approach to manage agricultural waste",
+  "main": "index.js",
+  "scripts": {
+    "start": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd Backend && npm run dev:server",
+    "auction": "cd Backend && npm run dev:auction",
+    "client": "cd frontend && npm start",
+    "dev": "concurrently \"npm run server\" \"npm run auction\" \"npm run client\"",
+    "install-all": "npm install && cd Backend && npm install && cd ../frontend && npm install"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/username/StubbleManagement.git"
+  },
+  "keywords": [
+    "stubble",
+    "agriculture",
+    "waste-management",
+    "eco-friendly",
+    "auction"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.8.4",
+    "concurrently": "^7.6.0"
+  }
+}

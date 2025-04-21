@@ -19,7 +19,7 @@ const RoomModel = require('../models/AuctionRoom');
  * @desc    Get current authenticated user
  * @access  Private
  */
-router.get('/me', auth, async (req, res) => {
+router.get('/api/auth/me', auth, async (req, res) => {
     try {
         const user = await User.findById(req.user.id).select('-password');
         if (user) {
@@ -57,7 +57,7 @@ router.get('/me', auth, async (req, res) => {
  * @desc    Authenticate user & get token
  * @access  Public
  */
-router.post('/login', [
+router.post('/api/auth/login', [
     check('email', 'Please include a valid email').isEmail(),
     check('password', 'Password is required').exists(),
     check('userType', 'User type is required').exists()
@@ -68,6 +68,7 @@ router.post('/login', [
     }
 
     const { email, password, userType } = req.body;
+    console.log(`Login attempt: Email=${email}, UserType=${userType}`);
 
     try {
         let user;
@@ -83,15 +84,19 @@ router.post('/login', [
         } else if (userType === 'Admin') {
             user = await Admin.findOne({ email });
             collection = Admin;
+            console.log(`Admin lookup result: ${user ? 'Found' : 'Not found'}`);
         } else {
             return res.status(400).json({ msg: 'Invalid user type' });
         }
 
         if (!user) {
+            console.log(`User not found: ${email}`);
             return res.status(400).json({ msg: 'Invalid credentials' });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
+        console.log(`Password comparison result: ${isMatch ? 'Match' : 'No match'}`);
+        
         if (!isMatch) {
             return res.status(400).json({ msg: 'Invalid credentials' });
         }
@@ -109,6 +114,7 @@ router.post('/login', [
             { expiresIn: 360000 },
             (err, token) => {
                 if (err) throw err;
+                console.log(`Login successful for: ${email}`);
                 res.json({
                     token,
                     user: {
@@ -121,17 +127,17 @@ router.post('/login', [
             }
         );
     } catch (err) {
-        console.error(err.message);
+        console.error('Login error:', err.message);
         res.status(500).json({ msg: 'Server Error' });
     }
 });
 
 /**
  * @route   POST /api/auth/register
- * @desc    Register a user
+ * @desc    Register a user (Farmer or Company only)
  * @access  Public
  */
-router.post('/register', [
+router.post('/api/auth/register', [
     check('name', 'Name is required').not().isEmpty(),
     check('email', 'Please include a valid email').isEmail(),
     check('password', 'Please enter a password with 6 or more characters').isLength({ min: 6 }),
@@ -144,6 +150,11 @@ router.post('/register', [
     }
 
     const { name, email, password, mobileNo, userType } = req.body;
+
+    // Prevent registration as Admin
+    if (userType === 'Admin') {
+        return res.status(403).json({ msg: 'Admin registration not allowed' });
+    }
 
     try {
         // Check for existing user across all collections
@@ -167,13 +178,6 @@ router.post('/register', [
             });
         } else if (userType === 'Company') {
             newUser = await Company.create({
-                name,
-                mobileNo,
-                email,
-                password
-            });
-        } else if (userType === 'Admin') {
-            newUser = await Admin.create({
                 name,
                 mobileNo,
                 email,
@@ -220,7 +224,7 @@ router.post('/register', [
  * @desc    Logout user / clear session
  * @access  Private
  */
-router.post('/logout', auth, (req, res) => {
+router.post('/api/auth/logout', auth, (req, res) => {
     if (req.session) {
         req.session.destroy(err => {
             if (err) {
@@ -241,7 +245,7 @@ router.post('/logout', auth, (req, res) => {
  * @desc    Create a service request
  * @access  Private
  */
-router.post('/services', auth, async (req, res) => {
+router.post('/api/services', auth, async (req, res) => {
     try {
         const serviceExists = await service.findOne({ email: req.body.email });
 
@@ -281,10 +285,62 @@ router.post('/services', auth, async (req, res) => {
  * @desc    Get all service requests
  * @access  Private (Admin only)
  */
-router.get('/services', auth, async (req, res) => {
+router.get('/api/services', auth, async (req, res) => {
     try {
         const services = await service.find();
         res.json(services);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+/**
+ * @route   GET /api/services/me
+ * @desc    Get service requests for the current user
+ * @access  Private
+ */
+router.get('/api/services/me', auth, async (req, res) => {
+    try {
+        // Find user info to get email
+        const user = await User.findById(req.user.id).select('-password');
+        const company = await Company.findById(req.user.id).select('-password');
+        const admin = await Admin.findById(req.user.id).select('-password');
+        
+        let email = '';
+        if (user) email = user.email;
+        else if (company) email = company.email;
+        else if (admin) email = admin.email;
+        
+        // Get service requests for this user's email
+        const services = await service.find({ email });
+        res.json(services);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+/**
+ * @route   GET /api/services/completed
+ * @desc    Get completed service requests for the current user
+ * @access  Private
+ */
+router.get('/api/services/completed', auth, async (req, res) => {
+    try {
+        // Find user info to get email
+        const user = await User.findById(req.user.id).select('-password');
+        const company = await Company.findById(req.user.id).select('-password');
+        const admin = await Admin.findById(req.user.id).select('-password');
+        
+        let email = '';
+        if (user) email = user.email;
+        else if (company) email = company.email;
+        else if (admin) email = admin.email;
+        
+        // Get completed service requests for this user's email
+        const completedServices = await ClearedList.find({ email });
+        res.json(completedServices);
     } catch (err) {
         console.error(err.message);
         res.status(500).json({ msg: 'Server Error' });
@@ -296,7 +352,7 @@ router.get('/services', auth, async (req, res) => {
  * @desc    Delete service request and add to cleared list
  * @access  Private (Admin only)
  */
-router.delete('/services/:email', auth, async (req, res) => {
+router.delete('/api/services/:email', auth, async (req, res) => {
     try {
         const serviceRequest = await service.findOne({ email: req.params.email });
 
@@ -335,7 +391,7 @@ router.delete('/services/:email', auth, async (req, res) => {
  * @desc    Create auction room
  * @access  Private (Admin only)
  */
-router.post('/rooms', auth, async (req, res) => {
+router.post('/api/rooms', auth, async (req, res) => {
     try {
         const roomExists = await RoomModel.findOne({ name: req.body.name });
 
@@ -380,7 +436,7 @@ router.post('/rooms', auth, async (req, res) => {
  * @desc    Get all active auction rooms and service requests
  * @access  Private
  */
-router.get('/rooms', auth, async (req, res) => {
+router.get('/api/rooms', auth, async (req, res) => {
     try {
         // Get current date and time
         const currentDate = new Date();
@@ -400,7 +456,7 @@ router.get('/rooms', auth, async (req, res) => {
  * @desc    Get dashboard data (admin)
  * @access  Private (Admin only)
  */
-router.get('/dashboard', auth, async (req, res) => {
+router.get('/api/dashboard', auth, async (req, res) => {
     try {
         // Get current date and time
         const currentDate = new Date();
@@ -412,6 +468,90 @@ router.get('/dashboard', auth, async (req, res) => {
         res.json({
             rooms,
             services
+        });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+/**
+ * @route   GET /api/rooms/joined
+ * @desc    Get rooms that the user has joined
+ * @access  Private
+ */
+router.get('/api/rooms/joined', auth, async (req, res) => {
+    try {
+        // In a real implementation, you would track which users have joined which rooms
+        // For now, we'll return all active rooms as if the user joined them all
+        const currentDate = new Date();
+        const rooms = await RoomModel.find({ endDate: { $gt: currentDate } });
+        
+        res.json({ rooms });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+/**
+ * @route   POST /api/rooms/join
+ * @desc    Join an auction room
+ * @access  Private
+ */
+router.post('/api/rooms/join', auth, async (req, res) => {
+    try {
+        const { code } = req.body;
+        
+        // Check if room exists
+        const room = await RoomModel.findOne({ code });
+        
+        if (!room) {
+            return res.status(404).json({ msg: 'Room not found' });
+        }
+        
+        // Check if room is still active
+        const currentDate = new Date();
+        if (room.endDate < currentDate) {
+            return res.status(400).json({ msg: 'This auction has ended' });
+        }
+        
+        // In a real implementation, you would record that this user joined this room
+        // For example, by adding an entry to a JoinedRooms collection
+        
+        return res.json({
+            success: true,
+            msg: 'Successfully joined the auction room',
+            room
+        });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+/**
+ * @route   GET /api/rooms/:code/bids/highest
+ * @desc    Get the highest bid for a room
+ * @access  Private
+ */
+router.get('/api/rooms/:code/bids/highest', auth, async (req, res) => {
+    try {
+        const { code } = req.params;
+        
+        // Find the highest bid for this room
+        const highestBid = await AuctionModel.findOne({ room: code })
+            .sort({ bid: -1 })  // Sort by bid amount in descending order
+            .limit(1);          // Get only the highest bid
+        
+        if (!highestBid) {
+            return res.status(404).json({ msg: 'No bids found for this room' });
+        }
+        
+        // Return bid info
+        res.json({
+            amount: highestBid.bid,
+            bidder: highestBid.user
         });
     } catch (err) {
         console.error(err.message);

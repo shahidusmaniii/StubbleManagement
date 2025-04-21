@@ -24,7 +24,7 @@ const AdminSchema = new mongoose.Schema({
         type: String,
         required: true,
         minlength: 6,
-        maxlength: 50,
+        maxlength: 100,
     }
 });
 
