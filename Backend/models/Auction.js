@@ -9,10 +9,14 @@ const AuctionSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    userName: {
+        type: String,
+        default: 'Anonymous'
+    },
     room: {
         type: String,
         required: true,
     }
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('Auction', AuctionSchema);

@@ -11,10 +11,12 @@ const CompanyDashboard = () => {
   const [roomCode, setRoomCode] = useState('');
   const [joinError, setJoinError] = useState('');
   const [bidInfo, setBidInfo] = useState({});
+  const [joinSuccess, setJoinSuccess] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setLoading(true);
         const token = localStorage.getItem('token');
         const config = {
           headers: {
@@ -23,16 +25,16 @@ const CompanyDashboard = () => {
         };
         
         // Get all active auction rooms
-        const roomsRes = await axios.get('/api/rooms', config);
+        const allRoomsRes = await axios.get('/api/rooms/all', config);
         
-        // Get rooms the company has joined (could be stored in user profile or tracked separately)
+        // Get rooms the company has joined
         const joinedRoomsRes = await axios.get('/api/rooms/joined', config);
         
-        setActiveRooms(roomsRes.data?.rooms || []);
+        setActiveRooms(allRoomsRes.data?.rooms || []);
         setJoinedRooms(joinedRoomsRes.data?.rooms || []);
         
         // Fetch highest bid for each room
-        const bidPromises = roomsRes.data?.rooms.map(async (room) => {
+        const bidPromises = allRoomsRes.data?.rooms.map(async (room) => {
           try {
             const bidRes = await axios.get(`/api/rooms/${room.code}/bids/highest`, config);
             return { roomCode: room.code, highestBid: bidRes.data };
@@ -76,6 +78,7 @@ const CompanyDashboard = () => {
   const handleJoinRoom = async (e) => {
     e.preventDefault();
     setJoinError('');
+    setJoinSuccess('');
     
     if (!roomCode) {
       setJoinError('Please enter a room code');
@@ -95,12 +98,17 @@ const CompanyDashboard = () => {
       
       if (res.data.success) {
         // Refresh the rooms lists
-        const roomsRes = await axios.get('/api/rooms', config);
+        const allRoomsRes = await axios.get('/api/rooms/all', config);
         const joinedRoomsRes = await axios.get('/api/rooms/joined', config);
         
-        setActiveRooms(roomsRes.data?.rooms || []);
+        setActiveRooms(allRoomsRes.data?.rooms || []);
         setJoinedRooms(joinedRoomsRes.data?.rooms || []);
+        
+        setJoinSuccess(`Successfully joined auction room: ${res.data.room.name}`);
         toggleJoinRoomModal();
+        
+        // Scroll to My Auction Rooms section
+        window.scrollTo(0, 0);
       }
     } catch (err) {
       setJoinError(err.response?.data?.msg || 'Failed to join room');
@@ -114,6 +122,9 @@ const CompanyDashboard = () => {
 
   const joinRoom = async (roomCode) => {
     try {
+      setError('');
+      setJoinSuccess('');
+      
       const token = localStorage.getItem('token');
       const config = {
         headers: {
@@ -125,12 +136,17 @@ const CompanyDashboard = () => {
       const res = await axios.post('/api/rooms/join', { code: roomCode }, config);
       
       if (res.data.success) {
+        setJoinSuccess(`Successfully joined auction room: ${res.data.room.name}`);
+        
         // Refresh the rooms lists
-        const roomsRes = await axios.get('/api/rooms', config);
+        const allRoomsRes = await axios.get('/api/rooms/all', config);
         const joinedRoomsRes = await axios.get('/api/rooms/joined', config);
         
-        setActiveRooms(roomsRes.data?.rooms || []);
+        setActiveRooms(allRoomsRes.data?.rooms || []);
         setJoinedRooms(joinedRoomsRes.data?.rooms || []);
+        
+        // Scroll to the top to show success message
+        window.scrollTo(0, 0);
       }
     } catch (err) {
       setError(err.response?.data?.msg || 'Failed to join room');
@@ -147,6 +163,7 @@ const CompanyDashboard = () => {
       <h1 className="mb-4">Company Dashboard</h1>
       
       {error && <div className="alert alert-danger">{error}</div>}
+      {joinSuccess && <div className="alert alert-success">{joinSuccess}</div>}
       
       <div className="row mb-4">
         <div className="col-md-6">

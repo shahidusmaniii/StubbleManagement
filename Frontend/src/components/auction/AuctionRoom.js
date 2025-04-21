@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import io from 'socket.io-client';
@@ -13,105 +13,243 @@ const AuctionRoom = () => {
   const [error, setError] = useState('');
   const [bidSuccess, setBidSuccess] = useState('');
   const [socket, setSocket] = useState(null);
+  const [timeRemaining, setTimeRemaining] = useState(null);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
+  // Get the current user ID when the component loads
   useEffect(() => {
-    // Initialize socket connection
-    const newSocket = io('http://localhost:5001');
-    setSocket(newSocket);
-
-    // Join auction room
-    newSocket.emit('joinRoom', { roomId });
-
-    // Listen for new bids
-    newSocket.on('newBid', (bid) => {
-      setBids((prevBids) => [bid, ...prevBids]);
-      setAuction((prevAuction) => ({
-        ...prevAuction,
-        currentBid: bid.amount
-      }));
-    });
-
-    // Clean up on component unmount
-    return () => {
-      newSocket.emit('leaveRoom', { roomId });
-      newSocket.disconnect();
-    };
-  }, [roomId]);
-
-  useEffect(() => {
-    const fetchAuctionData = async () => {
+    const getUserInfo = async () => {
       try {
-        // Get auction details
-        const auctionRes = await axios.get(`/api/auctions/${roomId}`);
+        // Try to get the token
+        const token = localStorage.getItem('token');
+        if (!token) return;
         
-        // Get auction bids
-        const bidsRes = await axios.get(`/api/auctions/${roomId}/bids`);
+        // Try to get user info from API
+        const res = await axios.get('/api/auth/me', {
+          headers: { 'x-auth-token': token }
+        });
         
-        setAuction(auctionRes.data);
-        setBids(bidsRes.data);
-        
-        // Set initial bid amount slightly higher than current bid
-        if (auctionRes.data.currentBid) {
-          setBidAmount((parseInt(auctionRes.data.currentBid) + 10).toString());
-        } else {
-          setBidAmount((parseInt(auctionRes.data.startingBid) + 10).toString());
+        if (res.data && res.data.user) {
+          // Save the user ID for later comparison
+          setCurrentUserId(res.data.user._id);
+          console.log("Found user ID:", res.data.user._id);
+          
+          // Also store in localStorage for future reference
+          localStorage.setItem('currentUserId', res.data.user._id);
         }
       } catch (err) {
-        setError('Failed to load auction data');
-        console.error(err);
-      } finally {
-        setLoading(false);
+        console.error("Error getting user info:", err);
       }
     };
-
-    fetchAuctionData();
-  }, [roomId]);
-
+    
+    getUserInfo();
+  }, []);
+  
+  // Function to check if a bid belongs to the current user
+  const isCurrentUserBid = useCallback((bid) => {
+    if (!bid || !currentUserId) return false;
+    
+    // Ensure both IDs are strings for comparison
+    const bidUserId = String(bid.user);
+    const myUserId = String(currentUserId);
+    
+    console.log(`Comparing bid user ID: ${bidUserId} with current user ID: ${myUserId}`);
+    
+    // Compare as strings to avoid type mismatches
+    return bidUserId === myUserId;
+  }, [currentUserId]);
+  
+  // Socket connection setup
+  useEffect(() => {
+    const newSocket = io('http://localhost:8001');
+    setSocket(newSocket);
+    
+    newSocket.on('connect', () => {
+      console.log("Socket connected:", newSocket.id);
+      setSocketConnected(true);
+      newSocket.emit('join room', { code: roomId });
+    });
+    
+    newSocket.on('connect_error', (err) => {
+      console.error("Socket connection error:", err);
+      setError(`Socket connection error: ${err.message}`);
+    });
+    
+    newSocket.on('startDetails', (roomData) => {
+      setAuction(roomData);
+      setLoading(false);
+      
+      if (roomData.startBid) {
+        setBidAmount((parseInt(roomData.startBid) + 10).toString());
+      }
+    });
+    
+    newSocket.on('receive_bid', (bid) => {
+      console.log("Received bid:", bid, "Current user:", currentUserId);
+      setBids(prevBids => [bid, ...prevBids]);
+      setAuction(prevAuction => ({
+        ...prevAuction,
+        currentBid: bid.bid
+      }));
+    });
+    
+    // Other socket event handlers...
+    newSocket.on('curr_bid', (bidData) => {
+      setAuction(prevAuction => ({
+        ...prevAuction,
+        currentBid: bidData.bid
+      }));
+    });
+    
+    newSocket.on('starting_bid', (startingBid) => {
+      setAuction(prevAuction => ({
+        ...prevAuction,
+        startingBid: startingBid
+      }));
+    });
+    
+    newSocket.on('auction_ended', () => {
+      setError('This auction has ended');
+    });
+    
+    newSocket.on('room_error', (code) => {
+      setError(`Room not found with code: ${code}`);
+      setLoading(false);
+    });
+    
+    newSocket.on('error_bid', (errorData) => {
+      setError(errorData.message);
+    });
+    
+    newSocket.on('auth_error', (errorData) => {
+      setError(errorData.msg);
+    });
+    
+    newSocket.on('bids', (bidsData) => {
+      console.log("Received bid history:", bidsData);
+      setBids(bidsData);
+    });
+    
+    return () => {
+      newSocket.disconnect();
+    };
+  }, [roomId, currentUserId]);
+  
+  // Format date functions
   const formatDate = (dateString) => {
     const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
     return new Date(dateString).toLocaleDateString(undefined, options);
   };
-
+  
+  const formatBidTime = (timestamp) => {
+    if (!timestamp) return 'Just now';
+    
+    try {
+      const bidDate = new Date(timestamp);
+      if (isNaN(bidDate.getTime())) return 'Just now';
+      
+      // If date is today, just show time
+      const today = new Date();
+      if (bidDate.toDateString() === today.toDateString()) {
+        return bidDate.toLocaleTimeString();
+      }
+      
+      // If date is older, show date and time
+      return bidDate.toLocaleString();
+    } catch (err) {
+      console.error('Date formatting error:', err);
+      return 'Just now';
+    }
+  };
+  
+  // Render a bid in the history
+  const renderBidItem = useCallback((bid) => {
+    // Check if this bid belongs to the current user
+    const isMine = isCurrentUserBid(bid);
+    
+    // Use "You" for current user's bids, otherwise show the name
+    const displayName = isMine ? "You" : (bid.userName || bid.user || 'Anonymous');
+    
+    return (
+      <li key={bid._id || Math.random()} className={`list-group-item ${isMine ? 'bg-light' : ''}`}>
+        <div className="d-flex justify-content-between align-items-center">
+          <div>
+            <strong className={isMine ? 'text-primary' : ''}>{displayName}</strong> bid
+            <span className="text-success ml-2">₹{bid.bid}</span>
+          </div>
+          <small className="text-muted">
+            {formatBidTime(bid.createdAt)}
+          </small>
+        </div>
+      </li>
+    );
+  }, [isCurrentUserBid]);
+  
+  // Handle placing a bid
   const handleBid = async (e) => {
     e.preventDefault();
     setBidSuccess('');
     setError('');
-
-    // Validate bid amount
+    
+    // Validation checks...
     if (!bidAmount || isNaN(bidAmount) || parseInt(bidAmount) <= 0) {
       setError('Please enter a valid bid amount');
       return;
     }
-
-    // Check if bid is higher than current bid
+    
     if (auction.currentBid && parseInt(bidAmount) <= parseInt(auction.currentBid)) {
       setError('Bid must be higher than the current bid');
       return;
     }
-
-    // Check if bid is higher than starting bid
+    
     if (!auction.currentBid && parseInt(bidAmount) <= parseInt(auction.startingBid)) {
       setError('Bid must be higher than the starting bid');
       return;
     }
-
+    
     try {
-      const res = await axios.post(`/api/auctions/${roomId}/bid`, { amount: bidAmount });
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError('You must be logged in to place a bid');
+        return;
+      }
       
-      // Emit bid to socket
-      socket.emit('placeBid', {
-        roomId,
-        bid: res.data
+      // Get user info for the bid
+      let userId = currentUserId;
+      let userName = '';
+      
+      // Try to get user info from API if we don't have it
+      try {
+        const userRes = await axios.get('/api/auth/me', {
+          headers: { 'x-auth-token': token }
+        });
+        
+        if (userRes.data && userRes.data.user) {
+          userId = userRes.data.user._id;
+          userName = userRes.data.user.name || userRes.data.user.email.split('@')[0]; // Fallback to email username
+          setCurrentUserId(userId);
+          
+          // Store current user info in localStorage for future reference
+          localStorage.setItem('currentUserName', userName);
+        }
+      } catch (err) {
+        console.error('Error getting user info:', err);
+        // Try to get name from localStorage as fallback
+        userName = localStorage.getItem('currentUserName') || 'Anonymous';
+      }
+      
+      console.log("Placing bid with user ID:", userId, "and name:", userName);
+      
+      // Send bid through socket
+      socket.emit('send_bid', {
+        bid: parseInt(bidAmount),
+        user: userId,
+        userName: userName,
+        code: roomId
       });
-
+      
       setBidSuccess('Bid placed successfully!');
-      
-      // Update UI
-      setBids([res.data, ...bids]);
-      setAuction({
-        ...auction,
-        currentBid: bidAmount
-      });
       
       // Increase bid amount for next bid
       setBidAmount((parseInt(bidAmount) + 10).toString());
@@ -120,13 +258,29 @@ const AuctionRoom = () => {
       console.error(err);
     }
   };
-
+  
+  // Rest of component (loading states, JSX, etc.)...
   if (loading) {
-    return <div className="text-center mt-5"><div className="spinner-border text-primary" role="status"></div></div>;
+    return (
+      <div className="text-center mt-5">
+        <div className="spinner-border text-primary" role="status"></div>
+        <p className="mt-2">Connecting to auction room...</p>
+      </div>
+    );
   }
 
   if (!auction) {
-    return <div className="alert alert-danger">Auction not found or has ended.</div>;
+    return (
+      <div className="container mt-5">
+        <div className="alert alert-danger">
+          <h4>Auction Room Error</h4>
+          <p>{error || "Auction not found or has ended."}</p>
+          <button onClick={() => navigate('/dashboard')} className="btn btn-primary mt-3">
+            Return to Dashboard
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const isAuctionEnded = new Date(auction.endDate) < new Date();
@@ -148,14 +302,19 @@ const AuctionRoom = () => {
           <div className="card auction-container mb-4">
             <div className="card-body">
               <h4 className="card-title">Auction Details</h4>
+              {timeRemaining && (
+                <div className="alert alert-info">
+                  <strong>Time Remaining:</strong> {timeRemaining}
+                </div>
+              )}
               <p className="card-text">
-                <strong>Description:</strong> {auction.description || 'No description provided.'}<br />
-                <strong>Company:</strong> {auction.companyName}<br />
-                <strong>Starting Bid:</strong> ₹{auction.startingBid}/acre<br />
-                <strong>Current Bid:</strong> ₹{auction.currentBid || auction.startingBid}/acre<br />
-                <strong>End Date:</strong> {formatDate(auction.endDate)}<br />
-                <strong>Status:</strong> {isAuctionEnded ? 'Ended' : 'Active'}<br />
-                <strong>Participants:</strong> {auction.participants || 0}
+                <strong>Description:</strong> {auction?.description || 'No description provided.'}<br />
+                <strong>Company:</strong> {auction?.companyName}<br />
+                <strong>Starting Bid:</strong> ₹{auction?.startingBid}/acre<br />
+                <strong>Current Bid:</strong> ₹{auction?.currentBid || auction?.startingBid}/acre<br />
+                <strong>End Date:</strong> {auction?.endDate ? formatDate(auction.endDate) : 'N/A'}<br />
+                <strong>Status:</strong> {auction?.endDate && new Date(auction.endDate) < new Date() ? 'Ended' : 'Active'}<br />
+                <strong>Participants:</strong> {auction?.participants || 0}
               </p>
               
               {!isAuctionEnded && (
@@ -199,19 +358,7 @@ const AuctionRoom = () => {
                 <p className="text-center p-3">No bids yet. Be the first to bid!</p>
               ) : (
                 <ul className="list-group list-group-flush">
-                  {bids.map((bid, index) => (
-                    <li key={index} className="list-group-item">
-                      <div className="d-flex justify-content-between align-items-center">
-                        <div>
-                          <strong>{bid.userName}</strong> bid
-                          <span className="text-success ml-2">₹{bid.amount}</span>
-                        </div>
-                        <small className="text-muted">
-                          {formatDate(bid.createdAt)}
-                        </small>
-                      </div>
-                    </li>
-                  ))}
+                  {bids.map(renderBidItem)}
                 </ul>
               )}
             </div>

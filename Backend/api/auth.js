@@ -13,6 +13,30 @@ const ClearedList = require('../models/ClearedList');
 const { encryption } = require('../middleware/hasing');
 const { check, validationResult } = require('express-validator/check');
 const RoomModel = require('../models/AuctionRoom');
+const mongoose = require('mongoose');
+
+// Define the schema for room participants if it doesn't exist elsewhere
+const RoomParticipationSchema = new mongoose.Schema({
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true
+    },
+    userType: {
+        type: String,
+        required: true
+    },
+    roomCode: {
+        type: String,
+        required: true
+    },
+    joinedAt: {
+        type: Date,
+        default: Date.now
+    }
+});
+
+// Create the model if it doesn't already exist
+const RoomParticipation = mongoose.models.RoomParticipation || mongoose.model('RoomParticipation', RoomParticipationSchema);
 
 /**
  * @route   GET /api/auth/me
@@ -399,6 +423,10 @@ router.post('/api/rooms', auth, async (req, res) => {
             return res.status(400).json({ success: false, msg: 'Room with that name already exists' });
         }
 
+        // Get admin name
+        const admin = await Admin.findById(req.user.id).select('-password');
+        const adminName = admin ? admin.name : 'Admin';
+
         const room = await RoomModel.create({
             name: req.body.name,
             description: req.body.description,
@@ -409,11 +437,12 @@ router.post('/api/rooms', auth, async (req, res) => {
         });
 
         if (room) {
-            // Create initial bid by admin
+            // Create initial bid by admin with proper name
             const initialBid = await AuctionModel.create({
                 bid: req.body.startBid,
                 room: req.body.code,
-                user: "Admin"
+                user: req.user.id,
+                userName: adminName
             });
 
             return res.status(201).json({
@@ -433,20 +462,96 @@ router.post('/api/rooms', auth, async (req, res) => {
 
 /**
  * @route   GET /api/rooms
- * @desc    Get all active auction rooms and service requests
+ * @desc    Get auction rooms that the user has joined
  * @access  Private
  */
 router.get('/api/rooms', auth, async (req, res) => {
     try {
         // Get current date and time
         const currentDate = new Date();
+        
+        // For Admin, return all active rooms
+        if (req.user.type === 'Admin') {
+            const rooms = await RoomModel.find({ endDate: { $gt: currentDate } });
+            return res.json({ rooms });
+        }
+        
+        // For Company and Farmer, only return rooms they've joined
+        const participations = await RoomParticipation.find({ 
+            userId: req.user.id,
+            userType: req.user.type
+        });
+        
+        // If no participations, return empty array
+        if (!participations || participations.length === 0) {
+            return res.json({ rooms: [] });
+        }
+        
+        // Extract room codes from participations
+        const roomCodes = participations.map(p => p.roomCode);
+        
+        // Get active rooms that the user has joined
+        const rooms = await RoomModel.find({ 
+            code: { $in: roomCodes },
+            endDate: { $gt: currentDate } 
+        });
+        
+        res.json({ rooms });
+    } catch (err) {
+        console.error("Error fetching rooms:", err.message);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
 
-        // Get active rooms (end date is in the future)
+/**
+ * @route   GET /api/rooms/all
+ * @desc    Get all active rooms
+ * @access  Private
+ */
+router.get('/api/rooms/all', auth, async (req, res) => {
+    try {
+        const currentDate = new Date();
         const rooms = await RoomModel.find({ endDate: { $gt: currentDate } });
-
         res.json({ rooms });
     } catch (err) {
         console.error(err.message);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+/**
+ * @route   GET /api/rooms/available
+ * @desc    Get available rooms for a company to join
+ * @access  Private (Company only)
+ */
+router.get('/api/rooms/available', auth, async (req, res) => {
+    // Only company users can join rooms
+    if (req.user.type !== 'Company') {
+        return res.status(403).json({ msg: 'Only companies can join auction rooms' });
+    }
+    
+    try {
+        // Get current date and time
+        const currentDate = new Date();
+        
+        // Get rooms the user has already joined
+        const participations = await RoomParticipation.find({ 
+            userId: req.user.id,
+            userType: req.user.type
+        });
+        
+        // Extract room codes the user has already joined
+        const joinedRoomCodes = participations.map(p => p.roomCode);
+        
+        // Get active rooms that the user has NOT joined yet
+        const availableRooms = await RoomModel.find({ 
+            code: { $nin: joinedRoomCodes },
+            endDate: { $gt: currentDate } 
+        });
+        
+        res.json({ availableRooms });
+    } catch (err) {
+        console.error("Error fetching available rooms:", err.message);
         res.status(500).json({ msg: 'Server Error' });
     }
 });
@@ -482,10 +587,27 @@ router.get('/api/dashboard', auth, async (req, res) => {
  */
 router.get('/api/rooms/joined', auth, async (req, res) => {
     try {
-        // In a real implementation, you would track which users have joined which rooms
-        // For now, we'll return all active rooms as if the user joined them all
+        // Get current date
         const currentDate = new Date();
-        const rooms = await RoomModel.find({ endDate: { $gt: currentDate } });
+
+        // Get rooms the user has joined through the participation records
+        const participations = await RoomParticipation.find({ 
+            userId: req.user.id,
+            userType: req.user.type
+        });
+        
+        if (!participations || participations.length === 0) {
+            return res.json({ rooms: [] });
+        }
+        
+        // Extract room codes that the user has joined
+        const joinedRoomCodes = participations.map(p => p.roomCode);
+        
+        // Find all active rooms that match these codes
+        const rooms = await RoomModel.find({ 
+            code: { $in: joinedRoomCodes },
+            endDate: { $gt: currentDate } 
+        });
         
         res.json({ rooms });
     } catch (err) {
@@ -503,6 +625,10 @@ router.post('/api/rooms/join', auth, async (req, res) => {
     try {
         const { code } = req.body;
         
+        if (!code) {
+            return res.status(400).json({ msg: 'Room code is required' });
+        }
+        
         // Check if room exists
         const room = await RoomModel.findOne({ code });
         
@@ -516,8 +642,21 @@ router.post('/api/rooms/join', auth, async (req, res) => {
             return res.status(400).json({ msg: 'This auction has ended' });
         }
         
-        // In a real implementation, you would record that this user joined this room
-        // For example, by adding an entry to a JoinedRooms collection
+        // Check if user has already joined this room
+        const existingParticipation = await RoomParticipation.findOne({
+            userId: req.user.id,
+            userType: req.user.type,
+            roomCode: code
+        });
+        
+        // If not already joined, record participation
+        if (!existingParticipation) {
+            await RoomParticipation.create({
+                userId: req.user.id,
+                userType: req.user.type,
+                roomCode: code
+            });
+        }
         
         return res.json({
             success: true,

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auction Room Test</title>
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .left-panel {
+            flex: 2;
+        }
+        .right-panel {
+            flex: 1;
+            border-left: 1px solid #ccc;
+            padding-left: 20px;
+        }
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .bid-form {
+            margin-top: 20px;
+        }
+        .bid-history {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .bid-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .alert {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .alert-danger {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .alert-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Auction Room Test</h1>
+    
+    <div id="error-container"></div>
+    <div id="success-container"></div>
+    
+    <div class="container">
+        <div class="left-panel">
+            <div class="card">
+                <h3>Auction Details</h3>
+                <div id="time-remaining" class="alert alert-info" style="display:none;"></div>
+                <div id="auction-details">Loading...</div>
+                
+                <div class="bid-form">
+                    <h4>Place Your Bid</h4>
+                    <div>
+                        <input type="number" id="bid-amount" placeholder="Enter bid amount">
+                        <button id="place-bid-btn">Place Bid</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="right-panel">
+            <h3>Bid History</h3>
+            <div id="bid-history" class="bid-history">
+                <p>Loading bids...</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Auction room code (replace with your actual room code)
+        const roomCode = 'M8UBUA';
+        
+        // Connect to socket server
+        const socket = io('http://localhost:8001');
+        let timerInterval;
+        
+        // Store current user id
+        let currentUserId = null;
+        
+        // Display error messages
+        function showError(message) {
+            const errorContainer = document.getElementById('error-container');
+            errorContainer.innerHTML = `<div class="alert alert-danger">${message}</div>`;
+            setTimeout(() => {
+                errorContainer.innerHTML = '';
+            }, 5000);
+        }
+        
+        // Display success messages
+        function showSuccess(message) {
+            const successContainer = document.getElementById('success-container');
+            successContainer.innerHTML = `<div class="alert alert-success">${message}</div>`;
+            setTimeout(() => {
+                successContainer.innerHTML = '';
+            }, 5000);
+        }
+        
+        // Format date
+        function formatDate(dateString) {
+            const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+            return new Date(dateString).toLocaleDateString(undefined, options);
+        }
+        
+        // Format date for bid timestamps
+        function formatBidTime(timestamp) {
+            if (!timestamp) return 'Just now';
+            
+            try {
+                const bidDate = new Date(timestamp);
+                if (isNaN(bidDate.getTime())) return 'Just now';
+                
+                // If date is today, just show time
+                const today = new Date();
+                if (bidDate.toDateString() === today.toDateString()) {
+                    return bidDate.toLocaleTimeString();
+                }
+                
+                // If date is older, show date and time
+                return bidDate.toLocaleString();
+            } catch (err) {
+                console.error('Date formatting error:', err);
+                return 'Just now';
+            }
+        }
+        
+        // Update auction details display
+        function updateAuctionDetails(auction) {
+            const detailsContainer = document.getElementById('auction-details');
+            
+            let html = `
+                <p><strong>Name:</strong> ${auction.name}</p>
+                <p><strong>Description:</strong> ${auction.description || 'No description provided.'}</p>
+                <p><strong>Starting Bid:</strong> ₹${auction.startBid || auction.startingBid}/acre</p>
+                <p><strong>Current Bid:</strong> ₹<span id="current-bid">${auction.currentBid || auction.startBid || auction.startingBid}</span>/acre</p>
+                <p><strong>End Date:</strong> ${formatDate(auction.endDate)}</p>
+            `;
+            
+            detailsContainer.innerHTML = html;
+            
+            // Set min bid value based on current bid
+            const currentBid = auction.currentBid || auction.startBid || auction.startingBid;
+            document.getElementById('bid-amount').value = parseInt(currentBid) + 10;
+            document.getElementById('bid-amount').min = parseInt(currentBid) + 1;
+            
+            // Start countdown timer
+            startCountdown(auction.endDate);
+        }
+        
+        // Start countdown timer
+        function startCountdown(endDate) {
+            const timerElement = document.getElementById('time-remaining');
+            timerElement.style.display = 'block';
+            
+            // Clear any existing interval
+            if (timerInterval) {
+                clearInterval(timerInterval);
+            }
+            
+            const endTime = new Date(endDate).getTime();
+            
+            timerInterval = setInterval(() => {
+                const now = new Date().getTime();
+                const distance = endTime - now;
+                
+                if (distance <= 0) {
+                    clearInterval(timerInterval);
+                    timerElement.innerHTML = '<strong>Time Remaining:</strong> Auction has ended';
+                    timerElement.className = 'alert alert-danger';
+                    document.getElementById('place-bid-btn').disabled = true;
+                } else {
+                    // Calculate time remaining
+                    const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+                    const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                    const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+                    
+                    timerElement.innerHTML = `<strong>Time Remaining:</strong> ${days}d ${hours}h ${minutes}m ${seconds}s`;
+                }
+            }, 1000);
+        }
+        
+        // Update bid history
+        function updateBidHistory(bids) {
+            const historyContainer = document.getElementById('bid-history');
+            
+            if (!bids || bids.length === 0) {
+                historyContainer.innerHTML = '<p>No bids yet. Be the first to bid!</p>';
+                return;
+            }
+            
+            let html = '';
+            bids.forEach(bid => {
+                // Check if this bid belongs to the current user
+                const isCurrentUserBid = currentUserId && bid.user === currentUserId;
+                
+                // Use "You" for current user, otherwise show name
+                const displayName = isCurrentUserBid
+                    ? 'You'
+                    : (bid.userName || bid.user || 'Anonymous');
+                
+                html += `
+                    <div class="bid-item ${isCurrentUserBid ? 'bg-light' : ''}">
+                        <div><strong ${isCurrentUserBid ? 'class="text-primary"' : ''}>${displayName}</strong> bid <span style="color: green;">₹${bid.bid}</span></div>
+                        <small>${formatBidTime(bid.createdAt)}</small>
+                    </div>
+                `;
+            });
+            
+            historyContainer.innerHTML = html;
+        }
+        
+        // Socket connection events
+        socket.on('connect', () => {
+            console.log('Connected to server');
+            
+            // Join auction room
+            socket.emit('join room', { code: roomCode });
+        });
+        
+        socket.on('connect_error', (err) => {
+            showError('Failed to connect to server: ' + err.message);
+        });
+        
+        // Auction room events
+        socket.on('startDetails', (roomData) => {
+            console.log('Room details:', roomData);
+            updateAuctionDetails(roomData);
+        });
+        
+        socket.on('starting_bid', (startingBid) => {
+            console.log('Starting bid:', startingBid);
+            document.getElementById('current-bid').textContent = startingBid;
+        });
+        
+        socket.on('curr_bid', (bidData) => {
+            console.log('Current bid:', bidData);
+            document.getElementById('current-bid').textContent = bidData.bid;
+            document.getElementById('bid-amount').value = parseInt(bidData.bid) + 10;
+            document.getElementById('bid-amount').min = parseInt(bidData.bid) + 1;
+        });
+        
+        socket.on('bids', (bidsData) => {
+            console.log('Bid history:', bidsData);
+            updateBidHistory(bidsData);
+        });
+        
+        socket.on('receive_bid', (bid) => {
+            console.log('New bid received:', bid);
+            // Add bid to history
+            const historyContainer = document.getElementById('bid-history');
+            const bidItem = document.createElement('div');
+            bidItem.className = 'bid-item';
+            
+            // Check if this bid belongs to the current user
+            const isCurrentUserBid = currentUserId && bid.user === currentUserId;
+            
+            if (isCurrentUserBid) {
+                bidItem.classList.add('bg-light');
+            }
+            
+            // Use "You" for current user, otherwise show name
+            const displayName = isCurrentUserBid
+                ? 'You'
+                : (bid.userName || bid.user || 'Anonymous');
+            
+            bidItem.innerHTML = `
+                <div><strong ${isCurrentUserBid ? 'class="text-primary"' : ''}>${displayName}</strong> bid <span style="color: green;">₹${bid.bid}</span></div>
+                <small>${formatBidTime(bid.createdAt)}</small>
+            `;
+            historyContainer.insertBefore(bidItem, historyContainer.firstChild);
+        });
+        
+        socket.on('auction_ended', () => {
+            showError('This auction has ended');
+            document.getElementById('place-bid-btn').disabled = true;
+        });
+        
+        socket.on('room_error', (code) => {
+            showError(`Room not found with code: ${code}`);
+        });
+        
+        socket.on('error_bid', (errorData) => {
+            showError(errorData.message);
+        });
+        
+        socket.on('auth_error', (errorData) => {
+            showError(errorData.msg);
+        });
+        
+        // Place bid button click handler
+        document.getElementById('place-bid-btn').addEventListener('click', () => {
+            const bidAmount = document.getElementById('bid-amount').value;
+            
+            if (!bidAmount || isNaN(bidAmount) || parseInt(bidAmount) <= 0) {
+                showError('Please enter a valid bid amount');
+                return;
+            }
+            
+            const currentBid = document.getElementById('current-bid').textContent;
+            if (parseInt(bidAmount) <= parseInt(currentBid)) {
+                showError('Bid must be higher than the current bid');
+                return;
+            }
+            
+            // Get a name from the user or generate one
+            const userName = prompt('Enter your name:', 'Test User') || 'Browser User';
+            
+            // Generate a random ID if not set yet
+            if (!currentUserId) {
+                currentUserId = 'WebBrowser_User_' + Math.floor(Math.random() * 1000);
+            }
+            
+            // Send bid to server
+            socket.emit('send_bid', {
+                bid: parseInt(bidAmount),
+                user: currentUserId,
+                userName: userName,
+                code: roomCode
+            });
+            
+            showSuccess('Bid placed successfully!');
+        });
+    </script>
+</body>
+</html> 
