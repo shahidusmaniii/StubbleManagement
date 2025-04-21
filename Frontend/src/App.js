@@ -13,6 +13,7 @@ import AuctionRoom from './components/auction/AuctionRoom';
 import ServiceForm from './components/services/ServiceForm';
 import AdminDashboard from './components/admin/AdminDashboard';
 import CompanyDashboard from './components/company/CompanyDashboard';
+import Footer from './components/layout/Footer';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 
@@ -91,6 +92,7 @@ const App = () => {
             } />
           </Routes>
         </div>
+        <Footer />
       </div>
     </Router>
   );
