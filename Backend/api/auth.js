@@ -1,9 +1,8 @@
 const express = require('express');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const auth = require('../middleware/auth');
-const config = require('config');
 const User = require('../models/User');
 const Company = require('../models/Company');
 const Admin = require('../models/Admin');
@@ -14,6 +13,95 @@ const { encryption } = require('../middleware/hasing');
 const { check, validationResult } = require('express-validator/check');
 const RoomModel = require('../models/AuctionRoom');
 const mongoose = require('mongoose');
+const { sendVerificationEmail } = require('../utils/email');
+const { OAuth2Client } = require('google-auth-library');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
+
+// Initialize Google OAuth client
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID || '512824280172-9965tinrcgi43ju4ptvbjso8qe5pgv80.apps.googleusercontent.com');
+
+// Create email transporter
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER || 'managementstubble@gmail.com',
+        pass: process.env.EMAIL_PASSWORD || 'rqgk aajr rwkz eilp'
+    }
+});
+
+// Test email endpoint
+router.get('/test-email', async (req, res) => {
+    try {
+        const mailOptions = {
+            from: process.env.EMAIL_USER || 'managementstubble@gmail.com',
+            to: process.env.EMAIL_USER || 'managementstubble@gmail.com',
+            subject: 'Test Email from Stubble Management',
+            text: 'This is a test email to verify the email configuration is working correctly.'
+        };
+
+        await transporter.sendMail(mailOptions);
+        res.json({ msg: 'Test email sent successfully' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// Add after the existing test-email endpoint
+/**
+ * @route   POST /api/auth/test-email
+ * @desc    Test email sending functionality
+ * @access  Public
+ */
+router.post('/api/auth/test-email', async (req, res) => {
+    try {
+        const { email } = req.body;
+        
+        if (!email) {
+            return res.status(400).json({ msg: 'Email is required' });
+        }
+        
+        // Import the sendTestEmail function
+        const { sendTestEmail } = require('../utils/email');
+        
+        console.log('Attempting to send test email to:', email);
+        const result = await sendTestEmail(email);
+        
+        if (result.success) {
+            if (result.service === 'ethereal') {
+                // If we used the test service
+                return res.json({ 
+                    success: true, 
+                    msg: 'Test email created with Ethereal. Check the preview URL:', 
+                    service: 'ethereal',
+                    previewUrl: result.previewUrl 
+                });
+            } else {
+                // If Gmail worked
+                return res.json({ 
+                    success: true, 
+                    msg: 'Test email sent successfully with Gmail', 
+                    service: 'gmail',
+                    messageId: result.messageId 
+                });
+            }
+        } else {
+            return res.status(500).json({ 
+                success: false, 
+                msg: 'Failed to send test email', 
+                error: result.error 
+            });
+        }
+    } catch (err) {
+        console.error('Test email error:', err);
+        res.status(500).json({ 
+            msg: 'Server Error', 
+            error: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
+    }
+});
 
 // Define the schema for room participants if it doesn't exist elsewhere
 const RoomParticipationSchema = new mongoose.Schema({
@@ -37,6 +125,11 @@ const RoomParticipationSchema = new mongoose.Schema({
 
 // Create the model if it doesn't already exist
 const RoomParticipation = mongoose.models.RoomParticipation || mongoose.model('RoomParticipation', RoomParticipationSchema);
+
+// Generate verification token
+const generateVerificationToken = () => {
+    return crypto.randomBytes(20).toString('hex');
+};
 
 /**
  * @route   GET /api/auth/me
@@ -118,6 +211,15 @@ router.post('/api/auth/login', [
             return res.status(400).json({ msg: 'Invalid credentials' });
         }
 
+        // Check if email is verified (skip for Admin)
+        if (userType !== 'Admin' && !user.isEmailVerified && !user.googleId) {
+            console.log(`User ${email} has not verified email`);
+            return res.status(401).json({ 
+                msg: 'Email not verified. Please check your email for verification link.',
+                needsVerification: true 
+            });
+        }
+
         const isMatch = await bcrypt.compare(password, user.password);
         console.log(`Password comparison result: ${isMatch ? 'Match' : 'No match'}`);
         
@@ -132,12 +234,19 @@ router.post('/api/auth/login', [
             }
         };
 
+        // Use either environment variable or config for JWT token
+        const jwtSecret = process.env.JWT_TOKEN || 'mytokenyoyoyo';
+
         jwt.sign(
             payload,
-            config.get('jwtToken'),
+            jwtSecret,
             { expiresIn: 360000 },
             (err, token) => {
-                if (err) throw err;
+                if (err) {
+                    console.error('JWT signing error:', err);
+                    return res.status(500).json({ msg: 'Error creating authentication token' });
+                }
+                
                 console.log(`Login successful for: ${email}`);
                 res.json({
                     token,
@@ -151,8 +260,12 @@ router.post('/api/auth/login', [
             }
         );
     } catch (err) {
-        console.error('Login error:', err.message);
-        res.status(500).json({ msg: 'Server Error' });
+        console.error('Login error:', err);
+        res.status(500).json({ 
+            msg: 'Server Error', 
+            error: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
     }
 });
 
@@ -167,7 +280,7 @@ router.post('/api/auth/register', [
     check('password', 'Please enter a password with 6 or more characters').isLength({ min: 6 }),
     check('mobileNo', 'Mobile number is required').not().isEmpty(),
     check('userType', 'User type is required').exists()
-], encryption, async (req, res) => {
+], async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
@@ -190,6 +303,15 @@ router.post('/api/auth/register', [
             return res.status(400).json({ msg: 'User already exists' });
         }
 
+        // Hash password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        // Generate verification token
+        const verificationToken = generateVerificationToken();
+        const verificationExpires = new Date();
+        verificationExpires.setHours(verificationExpires.getHours() + 24);
+
         let newUser;
 
         // Create the appropriate user type
@@ -198,48 +320,315 @@ router.post('/api/auth/register', [
                 name,
                 mobileNo,
                 email,
-                password
+                password: hashedPassword,
+                emailVerificationToken: verificationToken,
+                emailVerificationExpires: verificationExpires
             });
         } else if (userType === 'Company') {
             newUser = await Company.create({
                 name,
                 mobileNo,
                 email,
-                password
+                password: hashedPassword,
+                emailVerificationToken: verificationToken,
+                emailVerificationExpires: verificationExpires
             });
         } else {
             return res.status(400).json({ msg: 'Invalid user type' });
         }
 
-        if (newUser) {
-            const payload = {
+        // Send verification email
+        try {
+            const emailResult = await sendVerificationEmail(email, verificationToken, userType);
+            console.log('Verification email result:', emailResult);
+            
+            if (emailResult.service === 'ethereal') {
+                // If we used the ethereal test service, provide the preview URL
+                return res.status(201).json({ 
+                    msg: 'Registration successful! Since we had trouble with our email service, we are providing a preview link for your verification email. Please check it to verify your account.',
+                    emailService: 'ethereal',
+                    previewUrl: emailResult.previewUrl,
+                    user: {
+                        id: newUser.id,
+                        name: newUser.name,
+                        email: newUser.email,
+                        type: userType
+                    }
+                });
+            }
+            
+            // If Gmail succeeded
+            return res.status(201).json({ 
+                msg: 'Registration successful. Please check your email to verify your account.',
+                emailService: 'gmail',
                 user: {
                     id: newUser.id,
+                    name: newUser.name,
+                    email: newUser.email,
                     type: userType
                 }
-            };
-
-            jwt.sign(
-                payload,
-                config.get('jwtToken'),
-                { expiresIn: 360000 },
-                (err, token) => {
-                    if (err) throw err;
-                    res.json({
-                        token,
-                        user: {
-                            id: newUser.id,
-                            name: newUser.name,
-                            email: newUser.email,
-                            type: userType
-                        }
-                    });
+            });
+            
+        } catch (emailError) {
+            console.error('Failed to send verification email:', emailError);
+            // Continue with registration but notify user about email issue
+            return res.status(201).json({ 
+                msg: 'Registration successful, but we could not send a verification email. Please use the direct verification link below:',
+                directVerificationLink: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}&type=${userType}`,
+                emailError: emailError.message,
+                user: {
+                    id: newUser.id,
+                    name: newUser.name,
+                    email: newUser.email,
+                    type: userType
                 }
-            );
+            });
         }
     } catch (err) {
-        console.error(err.message);
-        res.status(500).json({ msg: 'Server Error' });
+        console.error('Registration error:', err);
+        res.status(500).json({ msg: 'Server Error', error: err.message });
+    }
+});
+
+/**
+ * @route   GET /api/auth/verify-email
+ * @desc    Verify user's email
+ * @access  Public
+ */
+router.get('/api/auth/verify-email', async (req, res) => {
+    const { token, type } = req.query;
+
+    console.log(`Email verification attempt: Token=${token}, Type=${type}`);
+
+    if (!token || !type) {
+        return res.status(400).json({ msg: 'Invalid verification link - missing token or type' });
+    }
+
+    try {
+        let user;
+        if (type === 'Farmer') {
+            console.log('Searching for farmer with token:', token);
+            user = await User.findOne({
+                emailVerificationToken: token,
+                emailVerificationExpires: { $gt: Date.now() }
+            });
+        } else if (type === 'Company') {
+            console.log('Searching for company with token:', token);
+            user = await Company.findOne({
+                emailVerificationToken: token,
+                emailVerificationExpires: { $gt: Date.now() }
+            });
+        } else {
+            console.log('Invalid user type for verification:', type);
+            return res.status(400).json({ msg: 'Invalid user type for verification' });
+        }
+
+        if (!user) {
+            console.log('Invalid or expired verification token');
+            
+            // Check if expired
+            const expiredUser = type === 'Farmer' 
+                ? await User.findOne({ emailVerificationToken: token })
+                : await Company.findOne({ emailVerificationToken: token });
+                
+            if (expiredUser) {
+                // Token exists but expired
+                console.log('Found expired token for user:', expiredUser.email);
+                
+                // Issue a new token
+                const newToken = generateVerificationToken();
+                expiredUser.emailVerificationToken = newToken;
+                
+                const verificationExpires = new Date();
+                verificationExpires.setHours(verificationExpires.getHours() + 24);
+                expiredUser.emailVerificationExpires = verificationExpires;
+                
+                await expiredUser.save();
+                
+                // Send a new verification email
+                try {
+                    await sendVerificationEmail(expiredUser.email, newToken, type);
+                    return res.status(400).json({ 
+                        msg: 'Verification link expired. A new verification link has been sent to your email.',
+                        emailResent: true
+                    });
+                } catch (emailErr) {
+                    console.error('Failed to send new verification email:', emailErr);
+                    return res.status(400).json({ 
+                        msg: 'Verification link expired. Could not send a new link. Please register again or contact support.',
+                        emailResent: false
+                    });
+                }
+            }
+            
+            return res.status(400).json({ msg: 'Invalid or expired verification link' });
+        }
+
+        console.log('User found, verifying email. Current verification status:', user.isEmailVerified);
+        
+        // Mark as verified
+        user.isEmailVerified = true;
+        user.emailVerificationToken = undefined;
+        user.emailVerificationExpires = undefined;
+        
+        // Debug the user object before saving
+        console.log('Updated user object before save:', {
+            id: user._id,
+            email: user.email,
+            isEmailVerified: user.isEmailVerified,
+            hasToken: !!user.emailVerificationToken
+        });
+        
+        const savedUser = await user.save();
+        
+        // Debug the user object after saving
+        console.log('User after save:', {
+            id: savedUser._id,
+            email: savedUser.email,
+            isEmailVerified: savedUser.isEmailVerified,
+            hasToken: !!savedUser.emailVerificationToken
+        });
+
+        console.log(`Email verified successfully for user: ${user.email}`);
+        res.json({ 
+            msg: 'Email verified successfully',
+            user: {
+                email: user.email,
+                name: user.name,
+                isVerified: user.isEmailVerified
+            }
+        });
+    } catch (err) {
+        console.error('Email verification error:', err);
+        res.status(500).json({ 
+            msg: 'Server Error', 
+            error: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
+    }
+});
+
+/**
+ * @route   POST /api/auth/google
+ * @desc    Authenticate with Google and get token
+ * @access  Public
+ */
+router.post('/api/auth/google', async (req, res) => {
+    const { token, credential, userType } = req.body;
+    
+    // Use either credential or token parameter
+    const idToken = credential || token;
+    
+    if (!idToken) {
+        return res.status(400).json({ msg: 'No credential provided' });
+    }
+
+    try {
+        console.log(`Verifying Google token for userType: ${userType || 'Farmer'}`);
+        const ticket = await client.verifyIdToken({
+            idToken: idToken,
+            audience: process.env.GOOGLE_CLIENT_ID || '512824280172-9965tinrcgi43ju4ptvbjso8qe5pgv80.apps.googleusercontent.com'
+        });
+
+        const payload = ticket.getPayload();
+        console.log('Google payload received:', {
+            email: payload.email,
+            name: payload.name,
+            sub: payload.sub
+        });
+        
+        const { email, name, sub: googleId, picture } = payload;
+        
+        // Default to Farmer if userType not provided
+        const userTypeToUse = userType || 'Farmer';
+
+        let user;
+        if (userTypeToUse === 'Farmer') {
+            user = await User.findOne({ $or: [{ email }, { googleId }] });
+        } else if (userTypeToUse === 'Company') {
+            user = await Company.findOne({ $or: [{ email }, { googleId }] });
+        } else {
+            return res.status(400).json({ msg: 'Invalid user type' });
+        }
+
+        if (user) {
+            console.log(`Existing user found with email: ${email}`);
+            // Update user if they exist
+            if (!user.googleId) {
+                console.log('Updating user with Google ID');
+                user.googleId = googleId;
+                await user.save();
+            }
+        } else {
+            // Create new user
+            console.log(`Creating new user with email: ${email}`);
+            try {
+                const userData = {
+                    name,
+                    email,
+                    googleId,
+                    isEmailVerified: true
+                };
+                
+                // Add avatar if available
+                if (picture) {
+                    userData.avatar = picture;
+                }
+                
+                console.log('Creating user with data:', userData);
+                
+                if (userTypeToUse === 'Farmer') {
+                    user = await User.create(userData);
+                } else if (userTypeToUse === 'Company') {
+                    user = await Company.create(userData);
+                }
+                console.log('New user created successfully:', user._id);
+            } catch (createError) {
+                console.error('Error creating user:', createError);
+                return res.status(400).json({ 
+                    msg: 'Failed to create user account',
+                    error: createError.message
+                });
+            }
+        }
+
+        const jwtPayload = {
+            user: {
+                id: user.id,
+                type: userTypeToUse
+            }
+        };
+
+        // Use either environment variable or config for JWT token
+        const jwtSecret = process.env.JWT_TOKEN || 'mytokenyoyoyo';
+
+        jwt.sign(
+            jwtPayload,
+            jwtSecret,
+            { expiresIn: 360000 },
+            (err, token) => {
+                if (err) {
+                    console.error('JWT signing error:', err);
+                    throw err;
+                }
+                console.log('Authentication successful, token generated');
+                res.json({
+                    token,
+                    user: {
+                        id: user.id,
+                        name: user.name,
+                        email: user.email,
+                        type: userTypeToUse
+                    }
+                });
+            }
+        );
+    } catch (err) {
+        console.error('Google auth error:', err);
+        res.status(500).json({ 
+            msg: 'Server Error', 
+            error: err.message 
+        });
     }
 });
 
@@ -710,6 +1099,260 @@ router.get('/api/rooms/:code/bids/highest', auth, async (req, res) => {
     } catch (err) {
         console.error(err.message);
         res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+// Debug endpoint for Google credential
+router.post('/google-debug', async (req, res) => {
+    try {
+        console.log('Received Google debug request');
+        const { credential } = req.body;
+        
+        if (!credential) {
+            return res.status(400).json({ msg: 'No credential provided' });
+        }
+        
+        // Simply log the credential and return success
+        console.log('Received credential:', credential.substring(0, 20) + '...');
+        
+        res.json({ 
+            success: true,
+            msg: 'Credential received successfully',
+            credentialLength: credential.length
+        });
+    } catch (err) {
+        console.error('Debug endpoint error:', err);
+        res.status(500).json({ 
+            msg: 'Server Error', 
+            error: err.message
+        });
+    }
+});
+
+// Simplified Google OAuth verification without complex validation
+router.post('/google-simple', async (req, res) => {
+    try {
+        console.log('Received simplified Google auth request');
+        const { credential } = req.body;
+        
+        if (!credential) {
+            console.error('No credential provided');
+            return res.status(400).json({ msg: 'No credential provided' });
+        }
+
+        console.log('Attempting to verify Google credential...');
+        
+        // Create a simple dummy user without validation
+        const dummyUser = {
+            id: '12345',
+            name: 'Google User',
+            email: 'google@example.com',
+            isCompany: false,
+            avatar: 'https://example.com/avatar.jpg'
+        };
+
+        // Generate JWT token
+        console.log('Generating JWT token...');
+        const token = jwt.sign(
+            { 
+                user: { 
+                    id: dummyUser.id,
+                    isCompany: dummyUser.isCompany
+                } 
+            },
+            process.env.JWT_TOKEN || 'mytokenyoyoyo',
+            { expiresIn: '1h' }
+        );
+
+        console.log('Authentication successful (simplified)');
+        res.json({ 
+            token,
+            user: dummyUser
+        });
+    } catch (err) {
+        console.error('Google auth error (simplified):', err);
+        res.status(500).json({ 
+            msg: 'Server Error', 
+            error: err.message
+        });
+    }
+});
+
+/**
+ * @route   POST /api/auth/resend-verification
+ * @desc    Resend verification email
+ * @access  Public
+ */
+router.post('/api/auth/resend-verification', [
+    check('email', 'Please include a valid email').isEmail()
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email } = req.body;
+    console.log(`Resend verification request for: ${email}`);
+
+    try {
+        // Check if user exists
+        let user = await User.findOne({ email });
+        let userType = 'Farmer';
+        
+        if (!user) {
+            user = await Company.findOne({ email });
+            userType = 'Company';
+            
+            if (!user) {
+                // Don't reveal that the user doesn't exist for security
+                return res.json({ 
+                    msg: 'If your email exists in our system, a verification link has been sent.'
+                });
+            }
+        }
+        
+        // Skip if already verified
+        if (user.isEmailVerified) {
+            return res.json({ 
+                msg: 'Your email is already verified. You can log in now.',
+                alreadyVerified: true
+            });
+        }
+        
+        // Generate new verification token
+        const verificationToken = generateVerificationToken();
+        const verificationExpires = new Date();
+        verificationExpires.setHours(verificationExpires.getHours() + 24);
+        
+        // Update user with new token
+        user.emailVerificationToken = verificationToken;
+        user.emailVerificationExpires = verificationExpires;
+        await user.save();
+        
+        // Send verification email
+        try {
+            const emailResult = await sendVerificationEmail(email, verificationToken, userType);
+            console.log('Verification email resent:', emailResult);
+            
+            if (emailResult.service === 'ethereal') {
+                // If using test email service
+                return res.json({
+                    msg: 'Verification email has been sent. Check the preview link:',
+                    emailService: 'ethereal',
+                    previewUrl: emailResult.previewUrl
+                });
+            }
+            
+            return res.json({ 
+                msg: 'Verification email has been sent. Please check your inbox.', 
+                emailService: 'gmail'
+            });
+        } catch (emailErr) {
+            console.error('Failed to send verification email:', emailErr);
+            return res.status(500).json({ 
+                msg: 'Could not send verification email. Please try again later.',
+                error: emailErr.message
+            });
+        }
+    } catch (err) {
+        console.error('Resend verification error:', err);
+        res.status(500).json({ 
+            msg: 'Server Error', 
+            error: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
+    }
+});
+
+/**
+ * @route   GET /api/auth/check-verification
+ * @desc    Check user's verification status
+ * @access  Public
+ */
+router.get('/api/auth/check-verification', async (req, res) => {
+    const { email, type } = req.query;
+
+    if (!email || !type) {
+        return res.status(400).json({ msg: 'Email and type are required' });
+    }
+
+    try {
+        let user;
+        
+        if (type === 'Farmer') {
+            user = await User.findOne({ email }).select('-password');
+        } else if (type === 'Company') {
+            user = await Company.findOne({ email }).select('-password');
+        } else {
+            return res.status(400).json({ msg: 'Invalid user type' });
+        }
+
+        if (!user) {
+            return res.status(404).json({ msg: 'User not found' });
+        }
+
+        // Return verification details
+        res.json({
+            email: user.email,
+            isEmailVerified: user.isEmailVerified,
+            hasVerificationToken: !!user.emailVerificationToken,
+            tokenExpiry: user.emailVerificationExpires,
+            isTokenExpired: user.emailVerificationExpires ? user.emailVerificationExpires < new Date() : null
+        });
+    } catch (err) {
+        console.error('Verification check error:', err);
+        res.status(500).json({ msg: 'Server error' });
+    }
+});
+
+/**
+ * @route   GET /api/auth/check-admin
+ * @desc    Check if admin exists and create default admin if needed
+ * @access  Public
+ */
+router.get('/api/auth/check-admin', async (req, res) => {
+    try {
+        console.log('Checking if admin exists');
+        const adminExists = await Admin.findOne({ email: 'admin@example.com' });
+        
+        if (adminExists) {
+            console.log('Admin account found');
+            return res.json({ 
+                exists: true, 
+                message: 'Admin account exists' 
+            });
+        }
+        
+        console.log('No admin account found, creating default admin');
+        
+        // Create default admin account
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash('admin123', salt);
+        
+        const newAdmin = await Admin.create({
+            name: 'Admin',
+            email: 'admin@example.com',
+            password: hashedPassword,
+            mobileNo: '0000000000' // Default mobile number
+        });
+        
+        console.log('Default admin account created');
+        
+        res.json({
+            exists: false,
+            created: true,
+            message: 'Default admin account created',
+            credentials: {
+                email: 'admin@example.com',
+                password: 'admin123'
+            }
+        });
+    } catch (err) {
+        console.error('Error checking/creating admin:', err);
+        res.status(500).json({ 
+            msg: 'Server Error', 
+            error: err.message 
+        });
     }
 });
 

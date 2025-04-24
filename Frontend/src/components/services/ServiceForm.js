@@ -40,12 +40,23 @@ const ServiceForm = () => {
             const user = res.data.user;
             setUserData(user);
             
+            console.log('User data from service form:', user);
+            
             // Auto-fill email and mobile number
             setFormData(prev => ({
               ...prev,
               email: user.email || '',
               mobileNo: user.mobileNo || ''
             }));
+            
+            // If user logged in via Google OAuth and has no mobile number, set a placeholder
+            if (!user.mobileNo && user.provider === 'google') {
+              console.log('Google OAuth user detected with no mobile number');
+              setFormData(prev => ({
+                ...prev,
+                mobileNo: ''
+              }));
+            }
             
             console.log('User data loaded successfully:', user);
           }
@@ -60,7 +71,7 @@ const ServiceForm = () => {
 
   const onChange = (e) => {
     // Only allow changes to fields that are not auto-filled
-    if (e.target.name !== 'email' && e.target.name !== 'mobileNo') {
+    if (e.target.name !== 'email') {
       setFormData({ ...formData, [e.target.name]: e.target.value });
     }
   };
@@ -145,10 +156,9 @@ const ServiceForm = () => {
             value={mobileNo}
             onChange={onChange}
             required
-            readOnly={true} // Always read-only to prevent edits
-            className={userData?.mobileNo ? "form-control bg-light" : "form-control"}
+            className={userData?.mobileNo ? "form-control" : "form-control"}
           />
-          {userData?.mobileNo && <small className="form-text text-muted">Auto-filled from your profile</small>}
+          {userData?.mobileNo && <small className="form-text text-muted">You can edit this field if needed</small>}
         </div>
         
         <div className="form-group">

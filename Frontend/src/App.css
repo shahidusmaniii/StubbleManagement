@@ -133,3 +133,15 @@ a {
   background: var(--danger-color);
   color: #fff;
 }
+
+/* Google Sign-In Button Styling */
+.google-signin-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.google-signin-container div {
+  margin: 0 auto;
+}

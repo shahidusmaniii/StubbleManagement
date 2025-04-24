@@ -1,5 +1,5 @@
+require('dotenv').config();
 const express = require('express');
-const config = require('config');
 const connectDB = require('../config/db');
 const seedAdmin = require('../config/seedAdmin');
 const cookieParser = require('cookie-parser');
@@ -20,5 +20,5 @@ app.use(cors());
 // The router now includes full paths like /api/auth/*
 app.use('/', router);
 
-const SERVER_PORT = config.get('serverPort') || 8000;
+const SERVER_PORT = process.env.PORT || 8000;
 app.listen(SERVER_PORT, () => console.log(`server started on port ${SERVER_PORT}`));

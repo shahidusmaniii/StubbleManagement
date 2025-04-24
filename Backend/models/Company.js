@@ -9,7 +9,12 @@ const CompanySchema = new mongoose.Schema({
     },
     mobileNo: {
         type: String,
-        required: true,
+        required: function() {
+            // Only require mobile number if not a Google-authenticated user
+            return !this.googleId;
+        },
+        unique: true,
+        sparse: true,  // Allow multiple null/undefined values
         minlength: 6,
         maxlength: 15,
     },
@@ -22,10 +27,36 @@ const CompanySchema = new mongoose.Schema({
     },
     password: {
         type: String,
-        required: true,
+        required: function() {
+            // Only require password if not a Google-authenticated user
+            return !this.googleId;
+        },
         minlength: 6,
         maxlength: 100,
+    },
+    isEmailVerified: {
+        type: Boolean,
+        default: false
+    },
+    emailVerificationToken: {
+        type: String
+    },
+    emailVerificationExpires: {
+        type: Date
+    },
+    googleId: {
+        type: String,
+        unique: true,
+        sparse: true
+    },
+    resetPasswordToken: {
+        type: String
+    },
+    resetPasswordExpires: {
+        type: Date
     }
+}, {
+    timestamps: true  // Add timestamps
 });
 
 module.exports = mongoose.model('Company', CompanySchema);

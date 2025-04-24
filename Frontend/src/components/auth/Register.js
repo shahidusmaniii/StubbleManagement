@@ -14,6 +14,7 @@ const Register = ({ setUser }) => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const { name, email, mobileNo, password, password2, userType } = formData;
 
@@ -24,6 +25,7 @@ const Register = ({ setUser }) => {
   const onSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
 
     if (password !== password2) {
       setError('Passwords do not match');
@@ -43,19 +45,12 @@ const Register = ({ setUser }) => {
 
       const res = await axios.post('/api/auth/register', registerData);
       
-      if (res.data && res.data.token) {
-        // Set token to localStorage
-        localStorage.setItem('token', res.data.token);
-        
-        // Set auth header
-        axios.defaults.headers.common['x-auth-token'] = res.data.token;
-        
-        // Set user state
-        setUser(res.data.user);
-        
-        // Redirect to dashboard
-        navigate('/dashboard');
-      }
+      setSuccess(res.data.msg);
+      // Don't automatically log in the user
+      // Instead, show success message and redirect to login
+      setTimeout(() => {
+        navigate('/login');
+      }, 3000);
     } catch (err) {
       const errorMsg = err.response?.data?.errors?.[0]?.msg || 
                       err.response?.data?.msg || 
@@ -70,6 +65,8 @@ const Register = ({ setUser }) => {
     <div className="auth-container">
       <h1 className="text-primary mb-4">Register</h1>
       {error && <div className="alert alert-danger">{error}</div>}
+      {success && <div className="alert alert-success">{success}</div>}
+      
       <form onSubmit={onSubmit}>
         <div className="form-group">
           <label>Name</label>
