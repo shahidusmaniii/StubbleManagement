@@ -23,10 +23,10 @@ const seedAdmin = async () => {
         if (!adminExists) {
             // Create new admin
             const admin = new Admin({
-                name: 'Admin',
-                email: 'admin@example.com',
-                password: 'admin123',
-                isAdmin: true
+                name: adminData.name,
+                email: adminData.email,
+                mobileNo: adminData.mobileNo,
+                password: adminData.password
             });
 
             // Hash password

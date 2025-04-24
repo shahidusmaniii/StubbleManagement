@@ -138,28 +138,33 @@ const generateVerificationToken = () => {
  */
 router.get('/api/auth/me', auth, async (req, res) => {
     try {
-        const user = await User.findById(req.user.id).select('-password');
-        if (user) {
-            return res.json({
-                user,
-                userType: 'Farmer'
-            });
-        }
+        // Get the user type from the token
+        const userType = req.user.type;
 
-        const company = await Company.findById(req.user.id).select('-password');
-        if (company) {
-            return res.json({
-                user: company,
-                userType: 'Company'
-            });
-        }
-
-        const admin = await Admin.findById(req.user.id).select('-password');
-        if (admin) {
-            return res.json({
-                user: admin,
-                userType: 'Admin'
-            });
+        if (userType === 'Farmer') {
+            const user = await User.findById(req.user.id).select('-password');
+            if (user) {
+                return res.json({
+                    user,
+                    userType: 'Farmer'
+                });
+            }
+        } else if (userType === 'Company') {
+            const company = await Company.findById(req.user.id).select('-password');
+            if (company) {
+                return res.json({
+                    user: company,
+                    userType: 'Company'
+                });
+            }
+        } else if (userType === 'Admin') {
+            const admin = await Admin.findById(req.user.id).select('-password');
+            if (admin) {
+                return res.json({
+                    user: admin,
+                    userType: 'Admin'
+                });
+            }
         }
 
         return res.status(404).json({ msg: 'User not found' });
@@ -1353,6 +1358,138 @@ router.get('/api/auth/check-admin', async (req, res) => {
             msg: 'Server Error', 
             error: err.message 
         });
+    }
+});
+
+/**
+ * @route   POST /api/auth/forgot-password
+ * @desc    Request password reset
+ * @access  Public
+ */
+router.post('/api/auth/forgot-password', [
+    check('email', 'Please include a valid email').isEmail(),
+    check('userType', 'User type is required').exists()
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email, userType } = req.body;
+
+    // Only allow Farmer and Company types
+    if (userType !== 'Farmer' && userType !== 'Company') {
+        return res.status(400).json({ msg: 'Password reset is only available for Farmers and Companies' });
+    }
+
+    try {
+        let user;
+        if (userType === 'Farmer') {
+            user = await User.findOne({ email });
+        } else {
+            user = await Company.findOne({ email });
+        }
+
+        if (!user) {
+            // Don't reveal that the user doesn't exist for security
+            return res.json({ 
+                msg: 'If your email exists in our system, a password reset link has been sent.'
+            });
+        }
+
+        // Generate reset token
+        const resetToken = generateVerificationToken();
+        const resetExpires = new Date();
+        resetExpires.setHours(resetExpires.getHours() + 1); // Token expires in 1 hour
+
+        // Update user with reset token
+        user.resetPasswordToken = resetToken;
+        user.resetPasswordExpires = resetExpires;
+        await user.save();
+
+        // Send reset email
+        try {
+            const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}&type=${userType}`;
+            const emailText = `
+                You are receiving this email because you (or someone else) has requested a password reset.
+                Please click on the following link to reset your password:
+                ${resetUrl}
+                
+                If you did not request this, please ignore this email.
+                
+                This link will expire in 1 hour.
+            `;
+
+            const mailOptions = {
+                from: process.env.EMAIL_USER || 'managementstubble@gmail.com',
+                to: email,
+                subject: 'Password Reset Request',
+                text: emailText
+            };
+
+            await transporter.sendMail(mailOptions);
+            res.json({ msg: 'Password reset email has been sent' });
+        } catch (emailErr) {
+            console.error('Failed to send reset email:', emailErr);
+            res.status(500).json({ msg: 'Could not send reset email' });
+        }
+    } catch (err) {
+        console.error('Password reset request error:', err);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+/**
+ * @route   POST /api/auth/reset-password
+ * @desc    Reset password
+ * @access  Public
+ */
+router.post('/api/auth/reset-password', [
+    check('token', 'Reset token is required').not().isEmpty(),
+    check('password', 'Please enter a password with 6 or more characters').isLength({ min: 6 }),
+    check('userType', 'User type is required').exists()
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { token, password, userType } = req.body;
+
+    try {
+        let user;
+        if (userType === 'Farmer') {
+            user = await User.findOne({
+                resetPasswordToken: token,
+                resetPasswordExpires: { $gt: Date.now() }
+            });
+        } else if (userType === 'Company') {
+            user = await Company.findOne({
+                resetPasswordToken: token,
+                resetPasswordExpires: { $gt: Date.now() }
+            });
+        } else {
+            return res.status(400).json({ msg: 'Invalid user type' });
+        }
+
+        if (!user) {
+            return res.status(400).json({ msg: 'Invalid or expired reset token' });
+        }
+
+        // Hash new password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        // Update password and clear reset token
+        user.password = hashedPassword;
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+        await user.save();
+
+        res.json({ msg: 'Password has been reset successfully' });
+    } catch (err) {
+        console.error('Password reset error:', err);
+        res.status(500).json({ msg: 'Server Error' });
     }
 });
 

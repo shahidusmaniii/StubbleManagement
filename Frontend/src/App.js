@@ -15,6 +15,8 @@ import ServiceForm from './components/services/ServiceForm';
 import AdminDashboard from './components/admin/AdminDashboard';
 import CompanyDashboard from './components/company/CompanyDashboard';
 import Footer from './components/layout/Footer';
+import ForgotPassword from './components/auth/ForgotPassword';
+import ResetPassword from './components/auth/ResetPassword';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 
@@ -49,14 +51,20 @@ const App = () => {
           // Set axios auth header
           axios.defaults.headers.common['x-auth-token'] = localStorage.token;
           
-          // Decode token for basic user info
-          const decoded = jwtDecode(localStorage.token);
-          
           // Additionally verify with backend
           try {
             const res = await axios.get('/api/auth/me');
             console.log('User verification response:', res.data);
-            setUser(res.data.user);
+            
+            // Ensure we have the correct user type from the backend
+            if (res.data.user && res.data.userType) {
+              setUser({
+                ...res.data.user,
+                type: res.data.userType // Use the userType from the backend response
+              });
+            } else {
+              setUser(res.data.user);
+            }
             setAuthError(null);
           } catch (err) {
             console.error('Error verifying token with backend:', err);
@@ -127,6 +135,8 @@ const App = () => {
             <Route path="/login" element={<Login setUser={setUser} />} />
             <Route path="/register" element={<Register setUser={setUser} />} />
             <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             
             <Route
               path="/dashboard"

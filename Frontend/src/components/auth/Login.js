@@ -24,23 +24,11 @@ const Login = ({ setUser }) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // Auto-fill admin credentials when Admin type is selected
   const handleUserTypeChange = (e) => {
-    const selectedType = e.target.value;
-    
-    if (selectedType === 'Admin') {
-      setFormData({
-        ...formData,
-        userType: selectedType,
-        email: 'admin@example.com',
-        password: 'admin123'
-      });
-    } else {
-      setFormData({
-        ...formData,
-        userType: selectedType
-      });
-    }
+    setFormData({
+      ...formData,
+      userType: e.target.value
+    });
   };
 
   const requestVerificationEmail = async () => {
@@ -232,6 +220,10 @@ const Login = ({ setUser }) => {
 
       <p className="mt-3">
         Don't have an account? <Link to="/register">Register</Link>
+      </p>
+      
+      <p className="mt-2">
+        <Link to="/forgot-password">Forgot Password?</Link>
       </p>
     </div>
   );
