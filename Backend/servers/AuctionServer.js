@@ -5,9 +5,12 @@ const AuctionServer = http.createServer(app);
 const { Server } = require('socket.io');
 const AuctionModel = require('../models/Auction');
 const RoomModel = require('../models/AuctionRoom');
+const User = require('../models/User');
+const Admin = require('../models/Admin');
 const mongoose = require('mongoose');
 const connectDB = require('../config/db');
 const cookieParser = require('cookie-parser');
+const { sendWinnerNotification, sendAdminAuctionEndNotification } = require('../utils/email');
 
 // Define the schema for room participants if it doesn't exist elsewhere
 const RoomParticipationSchema = new mongoose.Schema({
@@ -276,7 +279,7 @@ app.get('/api/rooms/join', async (req, res) => {
 });
 
 // Better auction end function with cleanup
-function endAuction(roomCode) {
+async function endAuction(roomCode) {
     console.log(`Ending auction for room ${roomCode}`);
     
     if (auctionTimers[roomCode]) {
@@ -285,26 +288,78 @@ function endAuction(roomCode) {
         console.log(`Cleared timer for room ${roomCode}`);
     }
     
-    // Get highest bid
-    AuctionModel.findOne({ room: roomCode }).sort({ bid: -1 }).limit(1)
-        .then(highestBid => {
-            if (highestBid) {
-                console.log(`Auction ended. Winner: ${highestBid.userName || highestBid.user}, Amount: ${highestBid.bid}`);
-                // Notify all users about the winner
-                io.to(roomCode).emit('auction_winner', {
-                    user: highestBid.user,
-                    userName: highestBid.userName || 'Anonymous',
-                    bid: highestBid.bid
-                });
-            } else {
-                console.log(`Auction ended with no bids for room ${roomCode}`);
-                io.to(roomCode).emit('auction_ended', { message: 'Auction ended with no bids' });
+    try {
+        // Get room details
+        const room = await RoomModel.findOne({ code: roomCode });
+        if (!room) {
+            console.error(`Room ${roomCode} not found`);
+            return;
+        }
+
+        // Get highest bid
+        const highestBid = await AuctionModel.findOne({ room: roomCode }).sort({ bid: -1 }).limit(1);
+        
+        if (highestBid) {
+            console.log(`Auction ended. Winner: ${highestBid.userName || highestBid.user}, Amount: ${highestBid.bid}`);
+            
+            // Get winner's email from User model
+            const winner = await User.findById(highestBid.user);
+            const winnerEmail = winner ? winner.email : null;
+            
+            // Get admin email
+            const admin = await Admin.findOne({});
+            const adminEmail = admin ? admin.email : process.env.ADMIN_EMAIL;
+
+            // Send notifications
+            if (winnerEmail) {
+                try {
+                    await sendWinnerNotification(
+                        winnerEmail,
+                        highestBid.userName || 'User',
+                        highestBid.bid,
+                        room.name
+                    );
+                } catch (emailError) {
+                    console.error('Error sending winner notification:', emailError);
+                }
             }
-        })
-        .catch(err => {
-            console.error(`Error finding highest bid for room ${roomCode}:`, err);
-            io.to(roomCode).emit('auction_error', { message: 'Error determining auction winner' });
-        });
+
+            if (adminEmail) {
+                try {
+                    await sendAdminAuctionEndNotification(
+                        adminEmail,
+                        highestBid.userName || 'User',
+                        winnerEmail || 'No email available',
+                        highestBid.bid,
+                        room.name
+                    );
+                } catch (emailError) {
+                    console.error('Error sending admin notification:', emailError);
+                }
+            }
+
+            // Notify all users about the winner
+            io.to(roomCode).emit('auction_winner', {
+                user: highestBid.user,
+                userName: highestBid.userName || 'Anonymous',
+                bid: highestBid.bid
+            });
+
+            // Delete the auction room
+            await RoomModel.deleteOne({ code: roomCode });
+            console.log(`Auction room ${roomCode} deleted successfully`);
+        } else {
+            console.log(`Auction ended with no bids for room ${roomCode}`);
+            io.to(roomCode).emit('auction_ended', { message: 'Auction ended with no bids' });
+            
+            // Delete the auction room even if there were no bids
+            await RoomModel.deleteOne({ code: roomCode });
+            console.log(`Auction room ${roomCode} deleted successfully`);
+        }
+    } catch (err) {
+        console.error(`Error in endAuction for room ${roomCode}:`, err);
+        io.to(roomCode).emit('auction_error', { message: 'Error determining auction winner' });
+    }
 }
 
 // Testing routes to help debug auction issues
