@@ -17,9 +17,9 @@
   },
   "scripts": {
     "start": "node server.js",
-    "start:auction": "node servers/auctionServer.js",
+    "start:auction": "node servers/AuctionServer.js",
     "dev:server": "nodemon server.js",
-    "dev:auction": "nodemon servers/auctionServer.js",
+    "dev:auction": "nodemon servers/AuctionServer.js",
     "seed:admin": "node config/seedAdmin.js"
   },
   "name": "backend",
