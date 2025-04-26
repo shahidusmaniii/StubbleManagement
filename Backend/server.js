@@ -15,17 +15,36 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://usmaniii:usmaniii123@
 .then(() => console.log('MongoDB Connected'))
 .catch(err => console.error('MongoDB connection error:', err));
 
-// Configure CORS with proper settings
-app.use(cors({
-    origin: true, // This allows all origins while maintaining compatibility with credentials
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
-}));
+// CORS middleware - handle all preflight and CORS issues
+app.use((req, res, next) => {
+    // Allow requests from these origins
+    const allowedOrigins = ['https://stubble-management-jwrkb34nh-shahidusmaniiis-projects.vercel.app', 'http://localhost:3000'];
+    const origin = req.headers.origin;
+    
+    if (allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    
+    // Request methods you wish to allow
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    
+    // Request headers you wish to allow
+    res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Authorization, x-auth-token');
+    
+    // Set to true if you need the website to include cookies in the requests
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    
+    // Pass to next layer of middleware
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+    next();
+});
 
-app.use(cookieParser());   
-app.use(express.json()); 
-  
+// For parsing application/json
+app.use(express.json());
+app.use(cookieParser());
+
 // Use routers
 app.use('/', router);
 app.use('/', googleAuthRouter);
