@@ -21,7 +21,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 
 // Set default axios settings
-axios.defaults.baseURL = 'http://localhost:8000';
+axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 // Add a response interceptor for global error handling
 axios.interceptors.response.use(

@@ -4,7 +4,7 @@ import axios from 'axios';
 import GoogleSignIn from '../GoogleSignIn';
 
 // Set axios defaults for all requests
-axios.defaults.baseURL = 'http://localhost:8000';
+axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 const Login = ({ setUser }) => {
   const navigate = useNavigate();

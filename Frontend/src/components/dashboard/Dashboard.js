@@ -32,20 +32,20 @@ const Dashboard = () => {
         };
         
         // Get current user info
-        const userRes = await axios.get('http://localhost:8000/api/auth/me', config);
+        const userRes = await axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/auth/me`, config);
         console.log('User info response:', userRes.data);
         console.log('User type:', userRes.data.user.type, 'User object:', userRes.data.user);
         setUserInfo(userRes.data);
         
         // Get farmer's active service requests
         setDebugInfo('Fetching services...');
-        const servicesRes = await axios.get('http://localhost:8000/api/services/me', config);
+        const servicesRes = await axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/services/me`, config);
         console.log('Services response:', servicesRes.data);
         setServices(servicesRes.data || []);
         
         // Get farmer's completed service requests
         setDebugInfo('Fetching completed services...');
-        const completedRes = await axios.get('http://localhost:8000/api/services/completed', config);
+        const completedRes = await axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/services/completed`, config);
         console.log('Completed services response:', completedRes.data);
         setCompletedServices(completedRes.data || []);
         

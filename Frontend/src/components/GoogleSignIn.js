@@ -18,7 +18,7 @@ const GoogleSignIn = ({ onSuccess, onError, userType = 'Farmer' }) => {
             // Use the full Google auth endpoint with proper error handling
             console.log(`Authenticating with Google as ${userType}...`);
             const response = await axios.post(
-                'http://localhost:8000/api/auth/google', 
+                `${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/auth/google`, 
                 { 
                     credential: credentialResponse.credential,
                     userType 

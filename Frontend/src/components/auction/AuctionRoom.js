@@ -106,7 +106,7 @@ const AuctionRoom = () => {
   
   // Socket connection setup
   useEffect(() => {
-    const newSocket = io('http://localhost:8001');
+    const newSocket = io(process.env.REACT_APP_AUCTION_SERVER_URL || 'http://localhost:8001');
     setSocket(newSocket);
     
     newSocket.on('connect', () => {

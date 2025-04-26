@@ -23,7 +23,7 @@ const VerifyEmail = () => {
             try {
                 setLoading(true);
                 // Use the full URL to ensure the request goes to the backend
-                const baseURL = 'http://localhost:8000';
+                const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
                 const res = await axios.get(`${baseURL}/api/auth/verify-email?token=${token}&type=${type}`);
                 console.log('Verification response:', res.data);
                 setMessage(res.data.msg);
