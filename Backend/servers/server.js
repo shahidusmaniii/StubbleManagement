@@ -15,7 +15,14 @@ seedAdmin().catch(err => console.error('Error seeding admin:', err));
 
 app.use(cookieParser());   
 app.use(express.json()); 
-app.use(cors());
+app.use(cors({
+    origin: process.env.NODE_ENV === 'production' 
+        ? process.env.FRONTEND_URL 
+        : 'http://localhost:3000',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+}));
   
 // The router now includes full paths like /api/auth/*
 app.use('/', router);
