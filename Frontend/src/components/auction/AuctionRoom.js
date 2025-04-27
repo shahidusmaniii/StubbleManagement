@@ -106,17 +106,11 @@ const AuctionRoom = () => {
   
   // Socket connection setup
   useEffect(() => {
-    // Socket server URL
-    const socketURL = 'https://stubblemanagement-production.up.railway.app';
-    console.log("Connecting to auction server at:", socketURL);
-    
-    // Create a simple socket connection
-    const newSocket = io(socketURL);
+    const newSocket = io(process.env.REACT_APP_AUCTION_SERVER_URL || 'http://localhost:8001');
     setSocket(newSocket);
     
-    // Connection established
     newSocket.on('connect', () => {
-      console.log("Socket connected with ID:", newSocket.id);
+      console.log("Socket connected:", newSocket.id);
       setSocketConnected(true);
       newSocket.emit('join room', { code: roomId });
     });

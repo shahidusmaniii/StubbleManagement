@@ -1,57 +1,16 @@
 const express = require('express');
+const app = express();
 const http = require('http');
+const AuctionServer = http.createServer(app);
 const { Server } = require('socket.io');
-const cors = require('cors');
-const connectDB = require('../config/db');
 const AuctionModel = require('../models/Auction');
 const RoomModel = require('../models/AuctionRoom');
 const User = require('../models/User');
 const Admin = require('../models/Admin');
-const { sendWinnerNotification, sendAdminAuctionEndNotification } = require('../utils/email');
 const mongoose = require('mongoose');
+const connectDB = require('../config/db');
 const cookieParser = require('cookie-parser');
-
-// Create express app and HTTP server
-const app = express();
-const server = http.createServer(app);
-
-// Connect to database
-connectDB();
-
-// Middleware
-app.use(express.json());
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  credentials: true
-}));
-
-// Basic routes
-app.get('/', (req, res) => {
-  res.send('Auction Server is running');
-});
-
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Initialize Socket.IO
-const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-    credentials: true
-  }
-});
-
-// Log server startup
-const PORT = process.env.PORT || 8001;
-server.listen(PORT, () => {
-  console.log(`Auction Server running on port ${PORT}`);
-  console.log(`Socket.IO server is ready to accept connections`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`CORS settings: allowing all origins`);
-});
+const { sendWinnerNotification, sendAdminAuctionEndNotification } = require('../utils/email');
 
 // Define the schema for room participants if it doesn't exist elsewhere
 const RoomParticipationSchema = new mongoose.Schema({
@@ -76,11 +35,32 @@ const RoomParticipationSchema = new mongoose.Schema({
 // Create the model if it doesn't already exist
 const RoomParticipation = mongoose.models.RoomParticipation || mongoose.model('RoomParticipation', RoomParticipationSchema);
 
-// Track auction state
+connectDB();
+app.use(cookieParser());
+app.use(express.json());
+
+// Add a health check endpoint
+app.get('/', (req, res) => {
+  res.json({ status: 'Auction server is running' });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+const io = new Server(AuctionServer, {
+    cors: {
+        origin: ["http://localhost:3000", "https://stubble-management.vercel.app", "https://stubble-management-vercel-app.vercel.app"],
+        methods: ["GET", "POST"],
+        allowedHeaders: ["my-custom-header", "Content-Type", "Authorization"],
+        credentials: true
+    }
+});
+
 const auctionTimers = {};
 const roomParticipants = {}; // Track online participants per room
 
-// Helper function to get participant count
+// Get actual participant count from database
 async function getParticipantCount(roomCode) {
     try {
         const count = await RoomParticipation.countDocuments({ roomCode });
@@ -92,9 +72,8 @@ async function getParticipantCount(roomCode) {
     }
 }
 
-// Socket.IO connection handler
 io.on('connection', (socket) => {
-    console.log(`Client connected: ${socket.id}`);
+    console.log("A user is Connected", socket.id);
 
     socket.on("join room", async (data) => {
         console.log("Join room request received:", data);
@@ -191,7 +170,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle placing bids
     socket.on('send_bid', async (data) => {
         console.log("Received bid request:", {
             user: data.user,
@@ -270,7 +248,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle disconnects
     socket.on('disconnect', () => {
         console.log("User disconnected", socket.id);
         
@@ -278,12 +255,39 @@ io.on('connection', (socket) => {
         for (const roomCode in roomParticipants) {
             if (roomParticipants[roomCode].has(socket.id)) {
                 roomParticipants[roomCode].delete(socket.id);
+                // We don't update participant count here, as it counts registered participants, not online users
             }
         }
     });
 });
 
-// Auction end function
+// Add a new endpoint to get room info
+app.get('/api/rooms/join', async (req, res) => {
+    try {
+        const { code } = req.query;
+        
+        if (!code) {
+            return res.status(400).json({ success: false, msg: 'Room code is required' });
+        }
+        
+        console.log("REST API: Get room info for code:", code);
+        const room = await RoomModel.findOne({ code });
+        
+        if (!room) {
+            return res.status(404).json({ success: false, msg: 'Room not found' });
+        }
+        
+        return res.json({
+            success: true,
+            room
+        });
+    } catch (err) {
+        console.error("Error getting room:", err);
+        res.status(500).json({ success: false, msg: 'Server error' });
+    }
+});
+
+// Better auction end function with cleanup
 async function endAuction(roomCode) {
     console.log(`Ending auction for room ${roomCode}`);
     
@@ -367,32 +371,6 @@ async function endAuction(roomCode) {
     }
 }
 
-// Add a new endpoint to get room info
-app.get('/api/rooms/join', async (req, res) => {
-    try {
-        const { code } = req.query;
-        
-        if (!code) {
-            return res.status(400).json({ success: false, msg: 'Room code is required' });
-        }
-        
-        console.log("REST API: Get room info for code:", code);
-        const room = await RoomModel.findOne({ code });
-        
-        if (!room) {
-            return res.status(404).json({ success: false, msg: 'Room not found' });
-        }
-        
-        return res.json({
-            success: true,
-            room
-        });
-    } catch (err) {
-        console.error("Error getting room:", err);
-        res.status(500).json({ success: false, msg: 'Server error' });
-    }
-});
-
 // Testing routes to help debug auction issues
 app.get('/api/test/rooms', async (req, res) => {
     try {
@@ -460,4 +438,10 @@ app.get('/api/test/bids/:roomCode', async (req, res) => {
         console.error("Error fetching bids:", err);
         res.status(500).json({ success: false, msg: 'Server error' });
     }
+});
+
+// module.exports = AuctionServer;
+const AUCTION_SERVER_PORT = process.env.AUCTION_SERVER_PORT || 8001;
+AuctionServer.listen(AUCTION_SERVER_PORT, () => {
+    console.log(`Auction Server is Runnig at port ${AUCTION_SERVER_PORT}`);
 });
