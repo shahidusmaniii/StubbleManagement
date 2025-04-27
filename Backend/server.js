@@ -18,10 +18,14 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://usmaniii:usmaniii123@
 // CORS middleware - handle all preflight and CORS issues
 app.use((req, res, next) => {
     // Allow requests from these origins
-    const allowedOrigins = ['http://localhost:3000', 'https://stubble-management.vercel.app'];
+    const allowedOrigins = ['http://localhost:3000', 'https://stubble-management.vercel.app', 'https://stubble-management-vercel-app.vercel.app'];
     const origin = req.headers.origin;
     
+    // Allow the requesting origin or deny if not in allowedOrigins
     if (allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    } else if (origin && origin.endsWith('.vercel.app')) {
+        // Also allow any vercel.app subdomain for development/preview URLs
         res.setHeader('Access-Control-Allow-Origin', origin);
     }
     
@@ -45,6 +49,24 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(cookieParser());
 
+// Add fallback CORS middleware for safety
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, etc)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is allowed
+    if (origin.includes('localhost') || 
+        origin.includes('stubble-management') || 
+        origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+    
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+}));
+
 // Use routers
 app.use('/', router);
 app.use('/', googleAuthRouter);
@@ -52,6 +74,24 @@ app.use('/', googleAuthRouter);
 // Add a simple test route
 app.get('/api/test', (req, res) => {
     res.json({ msg: 'API is working' });
+});
+
+// Add a CORS diagnostic endpoint
+app.get('/api/cors-test', (req, res) => {
+    res.json({ 
+        msg: 'CORS test successful',
+        headers: {
+            origin: req.headers.origin || 'No origin header',
+            host: req.headers.host,
+            referer: req.headers.referer || 'No referer',
+        },
+        cors: {
+            allowOrigin: res.getHeader('Access-Control-Allow-Origin') || 'Not set',
+            allowMethods: res.getHeader('Access-Control-Allow-Methods') || 'Not set',
+            allowHeaders: res.getHeader('Access-Control-Allow-Headers') || 'Not set',
+            allowCredentials: res.getHeader('Access-Control-Allow-Credentials') || 'Not set'
+        }
+    });
 });
 
 // Add debug logging for environment variables
