@@ -48,7 +48,9 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 8001;
 server.listen(PORT, () => {
   console.log(`Auction Server running on port ${PORT}`);
-  console.log(`Socket.IO server available at: ${process.env.PORT ? 'production URL' : `http://localhost:${PORT}`}`);
+  console.log(`Socket.IO server is ready to accept connections`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`CORS settings: allowing all origins`);
 });
 
 // Define the schema for room participants if it doesn't exist elsewhere
