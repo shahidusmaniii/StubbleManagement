@@ -18,7 +18,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://usmaniii:usmaniii123@
 // CORS middleware - handle all preflight and CORS issues
 app.use((req, res, next) => {
     // Allow requests from these origins
-    const allowedOrigins = ['https://stubble-management-jwrkb34nh-shahidusmaniiis-projects.vercel.app', 'http://localhost:3000'];
+    const allowedOrigins = ['http://localhost:3000', 'https://stubble-management.vercel.app'];
     const origin = req.headers.origin;
     
     if (allowedOrigins.includes(origin)) {
