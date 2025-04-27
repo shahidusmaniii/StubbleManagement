@@ -39,11 +39,20 @@ connectDB();
 app.use(cookieParser());
 app.use(express.json());
 
+// Add a health check endpoint
+app.get('/', (req, res) => {
+  res.json({ status: 'Auction server is running' });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 const io = new Server(AuctionServer, {
     cors: {
-        origin: "*",
+        origin: ["http://localhost:3000", "https://stubble-management.vercel.app", "https://stubble-management-vercel-app.vercel.app"],
         methods: ["GET", "POST"],
-        allowedHeaders: ["my-custom-header"],
+        allowedHeaders: ["my-custom-header", "Content-Type", "Authorization"],
         credentials: true
     }
 });
