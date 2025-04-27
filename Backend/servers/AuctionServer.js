@@ -1,16 +1,55 @@
 const express = require('express');
-const app = express();
 const http = require('http');
-const AuctionServer = http.createServer(app);
 const { Server } = require('socket.io');
+const cors = require('cors');
+const connectDB = require('../config/db');
 const AuctionModel = require('../models/Auction');
 const RoomModel = require('../models/AuctionRoom');
 const User = require('../models/User');
 const Admin = require('../models/Admin');
-const mongoose = require('mongoose');
-const connectDB = require('../config/db');
-const cookieParser = require('cookie-parser');
 const { sendWinnerNotification, sendAdminAuctionEndNotification } = require('../utils/email');
+const mongoose = require('mongoose');
+const cookieParser = require('cookie-parser');
+
+// Create express app and HTTP server
+const app = express();
+const server = http.createServer(app);
+
+// Connect to database
+connectDB();
+
+// Middleware
+app.use(express.json());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  credentials: true
+}));
+
+// Basic routes
+app.get('/', (req, res) => {
+  res.send('Auction Server is running');
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Initialize Socket.IO
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
+
+// Log server startup
+const PORT = process.env.PORT || 8001;
+server.listen(PORT, () => {
+  console.log(`Auction Server running on port ${PORT}`);
+  console.log(`Socket.IO server available at: ${process.env.PORT ? 'production URL' : `http://localhost:${PORT}`}`);
+});
 
 // Define the schema for room participants if it doesn't exist elsewhere
 const RoomParticipationSchema = new mongoose.Schema({
@@ -35,63 +74,11 @@ const RoomParticipationSchema = new mongoose.Schema({
 // Create the model if it doesn't already exist
 const RoomParticipation = mongoose.models.RoomParticipation || mongoose.model('RoomParticipation', RoomParticipationSchema);
 
-// Set up CORS middleware
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  next();
-});
-
-// Configure express middleware
-connectDB();
-app.use(cookieParser());
-app.use(express.json());
-
-// Request logging
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-  next();
-});
-
-// Basic HTTP routes
-app.get('/', (req, res) => {
-  res.send('Auction server is running');
-});
-
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Socket.IO path test endpoint
-app.get('/socket.io', (req, res) => {
-  res.send('Socket.IO endpoint is working');
-});
-
-// Serve socket.io client library
-app.get('/socket.io/socket.io.js', (req, res) => {
-  res.sendFile(require.resolve('socket.io/client-dist/socket.io.js'));
-});
-
-const io = new Server(AuctionServer, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-    credentials: true
-  },
-  serveClient: true,
-  path: '/socket.io',
-  transports: ['polling', 'websocket']
-});
-
+// Track auction state
 const auctionTimers = {};
 const roomParticipants = {}; // Track online participants per room
 
-// Get actual participant count from database
+// Helper function to get participant count
 async function getParticipantCount(roomCode) {
     try {
         const count = await RoomParticipation.countDocuments({ roomCode });
@@ -103,222 +90,198 @@ async function getParticipantCount(roomCode) {
     }
 }
 
+// Socket.IO connection handler
 io.on('connection', (socket) => {
-  console.log(`Client connected: ${socket.id}`);
-  
-  socket.on("join room", async (data) => {
-    console.log("Join room request received:", data);
-    
-    if (!data || !data.code) {
-      console.log("Invalid join room request: missing room code");
-      socket.emit("room_error", "Missing room code");
-      return;
-    }
-    
-    console.log("Room code is ", data.code);
-    let room = await RoomModel.findOne({ code: data.code });
-    
-    if (room) {
-      console.log("Room found, details:", {
-        name: room.name,
-        code: room.code,
-        startDate: room.startDate,
-        endDate: room.endDate
-      });
-      
-      console.log("Joined Successfully");
-      socket.join(data.code); 
-      
-      // Track online participants
-      if (!roomParticipants[data.code]) {
-        roomParticipants[data.code] = new Set();
-      }
-      roomParticipants[data.code].add(socket.id);
-      
-      // Get actual participant count from database
-      const participantCount = await getParticipantCount(data.code);
-      
-      // Update participant count for all users in the room
-      io.to(data.code).emit("participant_count", participantCount);
-      
-      // Add participant count to room details
-      room = room.toObject();
-      room.participants = participantCount;
-      
-      socket.emit("startDetails", room);
+    console.log(`Client connected: ${socket.id}`);
 
-      const endTime = new Date(room.endDate).getTime();
-      const currentTime = new Date().getTime();
-
-      if (currentTime >= endTime) {
-        console.log("Auction already ended for room:", data.code);
-        socket.emit("auction_ended");
-      } else {
-        const timeLeft = endTime - currentTime;
-        console.log(`Auction time remaining for room ${data.code}: ${Math.floor(timeLeft/1000/60)} minutes`);
+    socket.on("join room", async (data) => {
+        console.log("Join room request received:", data);
         
-        // Send time remaining to client
-        socket.emit("time_remaining", timeLeft);
-        
-        if (auctionTimers[data.code]) {
-          clearTimeout(auctionTimers[data.code]);
+        if (!data || !data.code) {
+            console.log("Invalid join room request: missing room code");
+            socket.emit("room_error", "Missing room code");
+            return;
         }
-        auctionTimers[data.code] = setTimeout(() => {
-          console.log(`Auction timer ended for room ${data.code}`);
-          io.to(data.code).emit("auction_ended");
-          endAuction(data.code);
-        }, timeLeft);
-      }
-
-      let startingBid = await AuctionModel.findOne({ room: data.code });
-      console.log("Starting bid:", startingBid ? startingBid.bid : 0);
-      socket.emit("starting_bid", startingBid ? startingBid.bid : 0);
-
-      let latestBid = await AuctionModel.findOne({ room: data.code }).sort({ _id: -1 });
-      if (latestBid) {
-        console.log("Latest bid:", latestBid);
-        socket.emit("curr_bid", latestBid);
-      }
-
-      // Get recent bids with proper sorting and include timestamp
-      let recentBids = await AuctionModel.find({ room: data.code })
-        .sort({ createdAt: -1 })
-        .limit(10);
         
-      console.log("Recent bids:", recentBids.length);
-      socket.emit("bids", recentBids);
-    } else {
-      console.log("Room not found with code:", data.code);
-      socket.emit("room_error", data.code);
-    }
-  });
+        console.log("Room code is ", data.code);
+        let room = await RoomModel.findOne({ code: data.code });
+        
+        if (room) {
+            console.log("Room found, details:", {
+                name: room.name,
+                code: room.code,
+                startDate: room.startDate,
+                endDate: room.endDate
+            });
+            
+            console.log("Joined Successfully");
+            socket.join(data.code); 
+            
+            // Track online participants
+            if (!roomParticipants[data.code]) {
+                roomParticipants[data.code] = new Set();
+            }
+            roomParticipants[data.code].add(socket.id);
+            
+            // Get actual participant count from database
+            const participantCount = await getParticipantCount(data.code);
+            
+            // Update participant count for all users in the room
+            io.to(data.code).emit("participant_count", participantCount);
+            
+            // Add participant count to room details
+            room = room.toObject();
+            room.participants = participantCount;
+            
+            socket.emit("startDetails", room);
 
-  // Listen for join events from the API
-  socket.on('room_joined', async (data) => {
-    if (data && data.code) {
-      const participantCount = await getParticipantCount(data.code);
-      io.to(data.code).emit("participant_count", participantCount);
-    }
-  });
+            const endTime = new Date(room.endDate).getTime();
+            const currentTime = new Date().getTime();
 
-  socket.on('send_bid', async (data) => {
-    console.log("Received bid request:", {
-      user: data.user,
-      userName: data.userName,
-      bid: data.bid,
-      room: data.code
+            if (currentTime >= endTime) {
+                console.log("Auction already ended for room:", data.code);
+                socket.emit("auction_ended");
+            } else {
+                const timeLeft = endTime - currentTime;
+                console.log(`Auction time remaining for room ${data.code}: ${Math.floor(timeLeft/1000/60)} minutes`);
+                
+                // Send time remaining to client
+                socket.emit("time_remaining", timeLeft);
+                
+                if (auctionTimers[data.code]) {
+                    clearTimeout(auctionTimers[data.code]);
+                }
+                auctionTimers[data.code] = setTimeout(() => {
+                    console.log(`Auction timer ended for room ${data.code}`);
+                    io.to(data.code).emit("auction_ended");
+                    endAuction(data.code);
+                }, timeLeft);
+            }
+
+            let startingBid = await AuctionModel.findOne({ room: data.code });
+            console.log("Starting bid:", startingBid ? startingBid.bid : 0);
+            socket.emit("starting_bid", startingBid ? startingBid.bid : 0);
+
+            let latestBid = await AuctionModel.findOne({ room: data.code }).sort({ _id: -1 });
+            if (latestBid) {
+                console.log("Latest bid:", latestBid);
+                socket.emit("curr_bid", latestBid);
+            }
+
+            // Get recent bids with proper sorting and include timestamp
+            let recentBids = await AuctionModel.find({ room: data.code })
+                .sort({ createdAt: -1 })
+                .limit(10);
+                
+            console.log("Recent bids:", recentBids.length);
+            socket.emit("bids", recentBids);
+        } else {
+            console.log("Room not found with code:", data.code);
+            socket.emit("room_error", data.code);
+        }
     });
-    
-    if (!data.user) {
-      socket.emit("auth_error", { msg: "You must be logged in to place a bid" });
-      return;
-    }
 
-    // Verify room exists
-    let room = await RoomModel.findOne({ code: data.code });
-    if (!room) {
-      socket.emit("error_bid", { message: "Auction room not found" });
-      return;
-    }
-
-    // Check if auction is still active
-    if (new Date() >= new Date(room.endDate)) {
-      socket.emit("error_bid", { message: "This auction has ended" });
-      return;
-    }
-
-    // Validate bid amount
-    if (!data.bid || isNaN(data.bid) || data.bid <= 0) {
-      socket.emit("error_bid", { message: "Invalid bid amount" });
-      return;
-    }
-
-    // Get latest bid for comparison
-    let latestBid = await AuctionModel.findOne({ room: data.code }).sort({ _id: -1 });
-    
-    // Ensure bid is higher than current highest bid
-    if (latestBid && latestBid.bid >= data.bid) {
-      socket.emit("error_bid", { message: `Your bid must be higher than the current bid of ₹${latestBid.bid}` });
-      return;
-    }
-
-    try {
-      // Make sure we have a valid username
-      const displayName = data.userName || 'Anonymous';
-      
-      // Store the exact user ID string
-      const userId = String(data.user);
-
-      console.log(`Creating new bid with userId '${userId}' (type: ${typeof userId}), displayName: ${displayName}`);
-
-      // Create new bid record in database
-      let newBid = await AuctionModel.create({ 
-        bid: data.bid,
-        user: userId,
-        userName: displayName,
-        room: data.code
-      });
-      
-      console.log("New bid created in DB:", {
-        id: newBid._id,
-        user: newBid.user,
-        userName: newBid.userName,
-        bid: newBid.bid
-      });
-
-      // Broadcast bid to all users in the room
-      io.to(data.code).emit('receive_bid', newBid);
-      
-      // Update current highest bid
-      io.to(data.code).emit("curr_bid", newBid);
-      
-      console.log(`New bid: ₹${data.bid} by ${displayName} (${userId}) in room ${data.code}`);
-    } catch (error) {
-      console.error("Database error:", error);
-      socket.emit("error_bid", { message: "Server error occurred while placing bid" });
-    }
-  });
-
-  socket.on('disconnect', () => {
-    console.log("User disconnected", socket.id);
-    
-    // Update online users count when users disconnect
-    for (const roomCode in roomParticipants) {
-      if (roomParticipants[roomCode].has(socket.id)) {
-        roomParticipants[roomCode].delete(socket.id);
-        // We don't update participant count here, as it counts registered participants, not online users
-      }
-    }
-  });
-});
-
-// Add a new endpoint to get room info
-app.get('/api/rooms/join', async (req, res) => {
-    try {
-        const { code } = req.query;
-        
-        if (!code) {
-            return res.status(400).json({ success: false, msg: 'Room code is required' });
+    // Listen for join events from the API
+    socket.on('room_joined', async (data) => {
+        if (data && data.code) {
+            const participantCount = await getParticipantCount(data.code);
+            io.to(data.code).emit("participant_count", participantCount);
         }
-        
-        console.log("REST API: Get room info for code:", code);
-        const room = await RoomModel.findOne({ code });
-        
-        if (!room) {
-            return res.status(404).json({ success: false, msg: 'Room not found' });
-        }
-        
-        return res.json({
-            success: true,
-            room
+    });
+
+    // Handle placing bids
+    socket.on('send_bid', async (data) => {
+        console.log("Received bid request:", {
+            user: data.user,
+            userName: data.userName,
+            bid: data.bid,
+            room: data.code
         });
-    } catch (err) {
-        console.error("Error getting room:", err);
-        res.status(500).json({ success: false, msg: 'Server error' });
-    }
+        
+        if (!data.user) {
+            socket.emit("auth_error", { msg: "You must be logged in to place a bid" });
+            return;
+        }
+
+        // Verify room exists
+        let room = await RoomModel.findOne({ code: data.code });
+        if (!room) {
+            socket.emit("error_bid", { message: "Auction room not found" });
+            return;
+        }
+
+        // Check if auction is still active
+        if (new Date() >= new Date(room.endDate)) {
+            socket.emit("error_bid", { message: "This auction has ended" });
+            return;
+        }
+
+        // Validate bid amount
+        if (!data.bid || isNaN(data.bid) || data.bid <= 0) {
+            socket.emit("error_bid", { message: "Invalid bid amount" });
+            return;
+        }
+
+        // Get latest bid for comparison
+        let latestBid = await AuctionModel.findOne({ room: data.code }).sort({ _id: -1 });
+        
+        // Ensure bid is higher than current highest bid
+        if (latestBid && latestBid.bid >= data.bid) {
+            socket.emit("error_bid", { message: `Your bid must be higher than the current bid of ₹${latestBid.bid}` });
+            return;
+        }
+
+        try {
+            // Make sure we have a valid username
+            const displayName = data.userName || 'Anonymous';
+            
+            // Store the exact user ID string
+            const userId = String(data.user);
+
+            console.log(`Creating new bid with userId '${userId}' (type: ${typeof userId}), displayName: ${displayName}`);
+
+            // Create new bid record in database
+            let newBid = await AuctionModel.create({ 
+                bid: data.bid,
+                user: userId,
+                userName: displayName,
+                room: data.code
+            });
+            
+            console.log("New bid created in DB:", {
+                id: newBid._id,
+                user: newBid.user,
+                userName: newBid.userName,
+                bid: newBid.bid
+            });
+
+            // Broadcast bid to all users in the room
+            io.to(data.code).emit('receive_bid', newBid);
+            
+            // Update current highest bid
+            io.to(data.code).emit("curr_bid", newBid);
+            
+            console.log(`New bid: ₹${data.bid} by ${displayName} (${userId}) in room ${data.code}`);
+        } catch (error) {
+            console.error("Database error:", error);
+            socket.emit("error_bid", { message: "Server error occurred while placing bid" });
+        }
+    });
+
+    // Handle disconnects
+    socket.on('disconnect', () => {
+        console.log("User disconnected", socket.id);
+        
+        // Update online users count when users disconnect
+        for (const roomCode in roomParticipants) {
+            if (roomParticipants[roomCode].has(socket.id)) {
+                roomParticipants[roomCode].delete(socket.id);
+            }
+        }
+    });
 });
 
-// Better auction end function with cleanup
+// Auction end function
 async function endAuction(roomCode) {
     console.log(`Ending auction for room ${roomCode}`);
     
@@ -402,6 +365,32 @@ async function endAuction(roomCode) {
     }
 }
 
+// Add a new endpoint to get room info
+app.get('/api/rooms/join', async (req, res) => {
+    try {
+        const { code } = req.query;
+        
+        if (!code) {
+            return res.status(400).json({ success: false, msg: 'Room code is required' });
+        }
+        
+        console.log("REST API: Get room info for code:", code);
+        const room = await RoomModel.findOne({ code });
+        
+        if (!room) {
+            return res.status(404).json({ success: false, msg: 'Room not found' });
+        }
+        
+        return res.json({
+            success: true,
+            room
+        });
+    } catch (err) {
+        console.error("Error getting room:", err);
+        res.status(500).json({ success: false, msg: 'Server error' });
+    }
+});
+
 // Testing routes to help debug auction issues
 app.get('/api/test/rooms', async (req, res) => {
     try {
@@ -469,11 +458,4 @@ app.get('/api/test/bids/:roomCode', async (req, res) => {
         console.error("Error fetching bids:", err);
         res.status(500).json({ success: false, msg: 'Server error' });
     }
-});
-
-// module.exports = AuctionServer;
-const PORT = process.env.PORT || 8001;
-AuctionServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`Auction Server running on port ${PORT}`);
-    console.log(`Socket.IO path: ${io.path()}`);
 });
