@@ -1,16 +1,17 @@
+require('dotenv').config();
 const express = require('express');
 const app = express();
 const http = require('http');
 const AuctionServer = http.createServer(app);
 const { Server } = require('socket.io');
-const AuctionModel = require('../models/Auction');
-const RoomModel = require('../models/AuctionRoom');
-const User = require('../models/User');
-const Admin = require('../models/Admin');
+const AuctionModel = require('./models/Auction');
+const RoomModel = require('./models/AuctionRoom');
+const User = require('./models/User');
+const Admin = require('./models/Admin');
 const mongoose = require('mongoose');
-const connectDB = require('../config/db');
+const connectDB = require('./config/db');
 const cookieParser = require('cookie-parser');
-const { sendWinnerNotification, sendAdminAuctionEndNotification } = require('../utils/email');
+const { sendWinnerNotification, sendAdminAuctionEndNotification } = require('./utils/email');
 
 // Define the schema for room participants if it doesn't exist elsewhere
 const RoomParticipationSchema = new mongoose.Schema({
@@ -440,8 +441,8 @@ app.get('/api/test/bids/:roomCode', async (req, res) => {
     }
 });
 
-// module.exports = AuctionServer;
-const AUCTION_SERVER_PORT = process.env.AUCTION_SERVER_PORT || 8001;
-AuctionServer.listen(AUCTION_SERVER_PORT, () => {
-    console.log(`Auction Server is Runnig at port ${AUCTION_SERVER_PORT}`);
-});
+// Set the PORT environment variable
+const PORT = process.env.PORT || 8001;
+AuctionServer.listen(PORT, () => {
+    console.log(`Auction Server is running on port ${PORT}`);
+}); 
