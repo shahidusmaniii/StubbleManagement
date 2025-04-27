@@ -106,7 +106,16 @@ const AuctionRoom = () => {
   
   // Socket connection setup
   useEffect(() => {
-    const newSocket = io(process.env.REACT_APP_AUCTION_SERVER_URL || 'http://localhost:8001');
+    const socketURL = process.env.REACT_APP_AUCTION_SERVER_URL || 'https://stubblemanagement-production.up.railway.app';
+    console.log("Connecting to socket server at:", socketURL);
+    
+    const newSocket = io(socketURL, {
+      path: '/socket.io/',
+      transports: ['websocket', 'polling'],
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
+    });
+    
     setSocket(newSocket);
     
     newSocket.on('connect', () => {

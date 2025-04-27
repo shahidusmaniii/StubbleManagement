@@ -48,13 +48,22 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Serve socket.io client library
+app.get('/socket.io/socket.io.js', (req, res) => {
+  res.sendFile(require.resolve('socket.io/client-dist/socket.io.js'));
+});
+
 const io = new Server(AuctionServer, {
     cors: {
         origin: ["http://localhost:3000", "https://stubble-management.vercel.app", "https://stubble-management-vercel-app.vercel.app"],
         methods: ["GET", "POST"],
         allowedHeaders: ["my-custom-header", "Content-Type", "Authorization"],
         credentials: true
-    }
+    },
+    path: '/socket.io/',
+    serveClient: true,
+    connectTimeout: 45000,
+    transports: ['websocket', 'polling']
 });
 
 const auctionTimers = {};
@@ -441,7 +450,8 @@ app.get('/api/test/bids/:roomCode', async (req, res) => {
 });
 
 // module.exports = AuctionServer;
-const AUCTION_SERVER_PORT = process.env.AUCTION_SERVER_PORT || 8001;
+const AUCTION_SERVER_PORT = process.env.PORT || process.env.AUCTION_SERVER_PORT || 8001;
 AuctionServer.listen(AUCTION_SERVER_PORT, () => {
-    console.log(`Auction Server is Runnig at port ${AUCTION_SERVER_PORT}`);
+    console.log(`Auction Server is running at port ${AUCTION_SERVER_PORT}`);
+    console.log(`Socket.IO path: ${io.path()}`);
 });
