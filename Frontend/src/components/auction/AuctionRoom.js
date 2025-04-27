@@ -106,27 +106,78 @@ const AuctionRoom = () => {
   
   // Socket connection setup
   useEffect(() => {
-    const socketURL = process.env.REACT_APP_AUCTION_SERVER_URL || 'https://stubblemanagement-production.up.railway.app';
+    // Try different server URLs if the main one fails
+    const socketURL = 'https://stubblemanagement-production.up.railway.app';
     console.log("Connecting to socket server at:", socketURL);
     
-    const newSocket = io(socketURL, {
+    // Socket.io connection options
+    const socketOptions = {
       path: '/socket.io/',
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000
-    });
+      transports: ['polling', 'websocket'], // Try polling first, then websocket
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      timeout: 20000,
+      forceNew: true,
+      autoConnect: true
+    };
     
+    console.log("Socket.io options:", socketOptions);
+    
+    // Create socket connection
+    const newSocket = io(socketURL, socketOptions);
     setSocket(newSocket);
     
+    // Connection established
     newSocket.on('connect', () => {
-      console.log("Socket connected:", newSocket.id);
+      console.log("Socket connected successfully with ID:", newSocket.id);
+      console.log("Transport used:", newSocket.io.engine.transport.name);
       setSocketConnected(true);
+      setError(''); // Clear any previous errors
+      
+      // Join the auction room
+      newSocket.emit('join room', { code: roomId });
+      console.log("Joining room:", roomId);
+    });
+    
+    // Handle connection failures
+    newSocket.on('connect_error', (err) => {
+      console.error("Socket connection error:", err);
+      setError(`Unable to connect to auction server: ${err.message}`);
+    });
+    
+    // Handle disconnects
+    newSocket.on('disconnect', (reason) => {
+      console.warn("Socket disconnected:", reason);
+      setSocketConnected(false);
+      if (reason === 'io server disconnect') {
+        // the disconnection was initiated by the server, reconnect manually
+        console.log("Attempting to reconnect...");
+        newSocket.connect();
+      }
+    });
+    
+    // Handle reconnect attempts
+    newSocket.io.on('reconnect_attempt', (attemptNumber) => {
+      console.log(`Reconnect attempt ${attemptNumber}...`);
+    });
+    
+    newSocket.io.on('reconnect', (attemptNumber) => {
+      console.log(`Reconnected after ${attemptNumber} attempts!`);
+      setSocketConnected(true);
+      setError('');
+      
+      // Rejoin the room after reconnection
       newSocket.emit('join room', { code: roomId });
     });
     
-    newSocket.on('connect_error', (err) => {
-      console.error("Socket connection error:", err);
-      setError(`Socket connection error: ${err.message}`);
+    newSocket.io.on('reconnect_error', (err) => {
+      console.error("Reconnect error:", err);
+      setError(`Failed to reconnect: ${err.message}`);
+    });
+    
+    newSocket.io.on('reconnect_failed', () => {
+      console.error("Failed to reconnect after all attempts");
+      setError("Could not connect to the auction server. Please refresh the page or try again later.");
     });
     
     newSocket.on('startDetails', (roomData) => {

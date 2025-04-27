@@ -48,14 +48,25 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Socket.IO path test endpoint
+app.get('/socket.io', (req, res) => {
+  res.send('Socket.IO endpoint is working');
+});
+
 // Serve socket.io client library
 app.get('/socket.io/socket.io.js', (req, res) => {
   res.sendFile(require.resolve('socket.io/client-dist/socket.io.js'));
 });
 
+// Log all incoming requests to help debug
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  next();
+});
+
 const io = new Server(AuctionServer, {
     cors: {
-        origin: ["http://localhost:3000", "https://stubble-management.vercel.app", "https://stubble-management-vercel-app.vercel.app"],
+        origin: ["http://localhost:3000", "https://stubble-management.vercel.app", "https://stubble-management-vercel-app.vercel.app", "*"],
         methods: ["GET", "POST"],
         allowedHeaders: ["my-custom-header", "Content-Type", "Authorization"],
         credentials: true
@@ -63,7 +74,9 @@ const io = new Server(AuctionServer, {
     path: '/socket.io/',
     serveClient: true,
     connectTimeout: 45000,
-    transports: ['websocket', 'polling']
+    pingTimeout: 60000,
+    transports: ['websocket', 'polling'],
+    allowEIO3: true
 });
 
 const auctionTimers = {};
