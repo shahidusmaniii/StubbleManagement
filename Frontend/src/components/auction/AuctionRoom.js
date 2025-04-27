@@ -106,26 +106,33 @@ const AuctionRoom = () => {
   
   // Socket connection setup
   useEffect(() => {
-    // Try different server URLs if the main one fails
+    // Socket server URL
     const socketURL = 'https://stubblemanagement-production.up.railway.app';
-    console.log("Connecting to socket server at:", socketURL);
+    console.log("Attempting to connect to auction server at:", socketURL);
     
     // Socket.io connection options
     const socketOptions = {
-      path: '/socket.io/',
-      transports: ['polling', 'websocket'], // Try polling first, then websocket
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      timeout: 20000,
+      path: '/socket.io',  // Match the path on the server
+      transports: ['polling', 'websocket'],
       forceNew: true,
-      autoConnect: true
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2000,
+      timeout: 10000
     };
     
-    console.log("Socket.io options:", socketOptions);
+    console.log("Using socket options:", socketOptions);
     
-    // Create socket connection
-    const newSocket = io(socketURL, socketOptions);
-    setSocket(newSocket);
+    // Create socket connection with error handling
+    let newSocket = null;
+    try {
+      newSocket = io(socketURL, socketOptions);
+      setSocket(newSocket);
+    } catch (err) {
+      console.error("Error creating socket:", err);
+      setError(`Failed to initialize socket connection: ${err.message}`);
+      return;
+    }
     
     // Connection established
     newSocket.on('connect', () => {
